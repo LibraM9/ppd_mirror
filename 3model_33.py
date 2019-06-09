@@ -133,12 +133,12 @@ def df_rank(df_prob, df_sub):
         df_tmp['rank'] = i+1
         df_sub = df_sub.merge(df_tmp,how='left',on=["listing_id",'rank'])
         df_sub.loc[df_sub['rank']==i+1,'repay_amt']=df_sub.loc[df_sub['rank']==i+1,i]
-    return df_sub['listing_id','repay_amt','repay_date']
+    return df_sub[['listing_id','repay_amt','repay_date']]
 submission = pd.read_csv(open("F:/数据集/1906拍拍/"+"submission.csv",encoding='utf8'))
 submission['repay_date'] = pd.to_datetime(submission['repay_date'])
 submission['rank'] = submission.groupby('listing_id')['repay_date'].rank(ascending=False,method='first')
 sub = df_rank(test_prob, submission)
-sub.to_csv(outpath+'sub_lgb_33_0609',index=None)
+sub.to_csv(outpath+'sub_lgb_33_0609.csv',index=None)
 
 # #train mse文件构建,太耗内存无法运行
 # from dateutil.relativedelta import relativedelta
