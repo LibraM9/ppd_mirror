@@ -40,6 +40,14 @@ basic["month_diff"] = (basic["auditing_date"] -basic["reg_mon"]).apply(lambda x:
 basic['gender'] = basic['gender'].apply(lambda x:1 if x== '男' else 0)
 basic['is_province_equal'] = basic.apply(lambda x:1 if x["cell_province"]==x["id_province"] else 0,axis=1)
 
+def trans_province(x):
+    try:
+        return int(x[1:])
+    except:
+        return np.nan
+basic['cell_province'] = basic['cell_province'].apply(lambda x:trans_province(x))
+basic['id_province'] = basic['id_province'].apply(lambda x:trans_province(x))
+
 del basic["reg_mon"]
 del basic["insertdate"]
 del basic["rank"]

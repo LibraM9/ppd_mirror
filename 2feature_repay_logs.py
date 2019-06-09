@@ -40,6 +40,7 @@ agg = {
     'date_diff':['count','mean',overdue_cnt]
 }
 #全部历史数据/历史1期/2期/3期账单还款时间
+#todo 30/60/90/180天
 for i in [0,1,2,3]:
     print(i)
     if i == 0:
@@ -51,10 +52,10 @@ for i in [0,1,2,3]:
     basic_union_order = basic_union_order.rename(columns={'repay_logs_order{}_user_id_'.format(i):"user_id",'repay_logs_order{}_listing_id_'.format(i):"listing_id"})
     basic = basic.merge(basic_union_order,how='left',on=["user_id","listing_id"])
 
-# 最近一次账单还款时间
-basic_rank = basic_union.loc[basic_union["rank"]==1][["user_id","listing_id",'date_diff']]
+# 100天内最近一次账单还款时间
+basic_union["last_diff"] = (basic_union["auditing_date"]-basic_union["repay_date"]).apply(lambda x:int(x.days))
+basic_rank = basic_union.loc[(basic_union["rank"]==1)&(basic_union["last_diff"]<=100)][["user_id","listing_id",'date_diff']]
 basic_rank = basic_rank.rename(columns={'date_diff':"repay_logs_date_diff_last"})
 basic = basic.merge(basic_rank,how='left',on=["user_id","listing_id"])
 
-del basic["rank"]
 basic.to_csv(outpath+'feature_repay_logs.csv',index=None)
