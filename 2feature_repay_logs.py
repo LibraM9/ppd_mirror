@@ -10,8 +10,10 @@ import numpy as np
 import gc
 from dateutil.relativedelta import relativedelta
 
-path = "F:/数据集/1906拍拍/"
-outpath = "F:/数据集处理/1906拍拍/"
+# path = "F:/数据集/1906拍拍/"
+# outpath = "F:/数据集处理/1906拍拍/"
+path = "/data/dev/lm/paipai/ori_data/"
+outpath = "/data/dev/lm/paipai/feature/"
 # Y指标基础表
 basic = pd.read_csv(open(outpath + "feature_main_key.csv", encoding='utf8'))
 basic["auditing_date"] = pd.to_datetime(basic["auditing_date"])

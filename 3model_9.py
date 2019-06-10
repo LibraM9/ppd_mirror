@@ -9,8 +9,12 @@ test 2019.2.1~2019.3.31
 """
 import pandas as pd
 
+oripath = "F:/数据集/1906拍拍/"
 inpath = "F:/数据集处理/1906拍拍/"
 outpath = "F:/项目相关/1906拍拍/out/"
+# oripath = "/data/dev/lm/paipai/ori_data/"
+# inpath = "/data/dev/lm/paipai/feature/"
+# outpath = "/data/dev/lm/paipai/out/"
 
 df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
 df_train = pd.read_csv(open(inpath + "feature_basic_train.csv", encoding='utf8'))
@@ -44,8 +48,8 @@ for col in df.columns:
     if col not in del_feature:
         features.append(col)
 catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province"]
-y = "y_date_diff_bin"
-n = 9 #分类数量，和y有关
+y = "y_date_diff"
+n = 33 #分类数量，和y有关
 #开始训练
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
@@ -85,7 +89,7 @@ for fold_, (trn_idx, val_idx) in enumerate(folds.split(train[features], train[y]
 
     num_round = 2000
     clf = lgb.train(param, trn_data, num_round, valid_sets=[trn_data, val_data], verbose_eval=100,
-                    early_stopping_rounds=50,categorical_feature=catgory_feature)
+                    early_stopping_rounds=10,categorical_feature=catgory_feature)
     oof[val_idx] = clf.predict(train.iloc[val_idx][features], num_iteration=clf.best_iteration)
 
     fold_importance_df = pd.DataFrame()
@@ -126,16 +130,16 @@ for i in range(n-1):
     test_prob[i] = test_prob[i]*test_prob["due_amt"]
 #评价
 
-#提交 做个映射，每个分箱一个钱数
+#提交
 def df_rank(df_prob, df_sub):
     for i in range(33):
         df_tmp = df_prob[['listing_id', i]]
         df_tmp['rank'] = i+1
         df_sub = df_sub.merge(df_tmp,how='left',on=["listing_id",'rank'])
         df_sub.loc[df_sub['rank']==i+1,'repay_amt']=df_sub.loc[df_sub['rank']==i+1,i]
-    return df_sub['listing_id','repay_amt','repay_date']
-submission = pd.read_csv(open("F:/数据集/1906拍拍/"+"submission.csv",encoding='utf8'))
+    return df_sub[['listing_id','repay_amt','repay_date']]
+submission = pd.read_csv(open(oripath+"submission.csv",encoding='utf8'))
 submission['repay_date'] = pd.to_datetime(submission['repay_date'])
 submission['rank'] = submission.groupby('listing_id')['repay_date'].rank(ascending=False,method='first')
 sub = df_rank(test_prob, submission)
-sub.to_csv(outpath+'sub_lgb_33_0609',index=None)
+sub.to_csv(outpath+'sub_lgb_33_0609.csv',index=None)

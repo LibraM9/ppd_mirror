@@ -19,6 +19,7 @@ user_info = pd.read_csv(open(path+"user_info.csv",encoding='utf8'))
 user_taglist = pd.read_csv(open(path+"user_taglist.csv",encoding='utf8'))
 # user_behavior_logs = pd.read_csv(open(path+"user_behavior_logs.csv",encoding='utf8')) #1G
 #121080/130000在test中
+#2016-08-12~2019-03-30
 user_repay_logs = pd.read_csv(open(path+"user_repay_logs.csv",encoding='utf8')) #900M
 
 #test中出现在train中的个数25537/130000

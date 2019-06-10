@@ -23,8 +23,8 @@ pd.set_option('display.max_columns', None)
     作者：天才儿童。
 '''
 
-
-train_df = pd.read_csv('dataset/train.csv', parse_dates=['auditing_date', 'due_date', 'repay_date'])
+path = "F:/数据集/1906拍拍/"
+train_df = pd.read_csv(open(path+"train.csv",encoding='utf8'), parse_dates=['auditing_date', 'due_date', 'repay_date'])
 train_df['repay_date'] = train_df[['due_date', 'repay_date']].apply(
     lambda x: x['repay_date'] if x['repay_date'] != '\\N' else x['due_date'], axis=1
 )
@@ -36,29 +36,29 @@ amt_labels = train_df['repay_amt'].values
 del train_df['label'], train_df['repay_amt'], train_df['repay_date']
 train_due_amt_df = train_df[['due_amt']]
 train_num = train_df.shape[0]
-test_df = pd.read_csv('dataset/test.csv', parse_dates=['auditing_date', 'due_date'])
+test_df = pd.read_csv(open(path+"test.csv",encoding='utf8'), parse_dates=['auditing_date', 'due_date'])
 sub = test_df[['listing_id', 'auditing_date', 'due_amt']]
 df = pd.concat([train_df, test_df], axis=0, ignore_index=True)
 
 
-listing_info_df = pd.read_csv('dataset/listing_info.csv')
+listing_info_df = pd.read_csv(open(path+"listing_info.csv",encoding='utf8'))
 del listing_info_df['user_id'], listing_info_df['auditing_date']
 df = df.merge(listing_info_df, on='listing_id', how='left')
 
 # 表中有少数user不止一条记录，因此按日期排序，去重，只保留最新的一条记录。
-user_info_df = pd.read_csv('dataset/user_info.csv', parse_dates=['reg_mon', 'insertdate'])
+user_info_df = pd.read_csv(open(path+"user_info.csv",encoding='utf8'), parse_dates=['reg_mon', 'insertdate'])
 user_info_df.rename(columns={'insertdate': 'info_insert_date'}, inplace=True)
 user_info_df = user_info_df.sort_values(by='info_insert_date', ascending=False).drop_duplicates('user_id').reset_index(drop=True)
 df = df.merge(user_info_df, on='user_id', how='left')
 
 # 同上
-user_tag_df = pd.read_csv('dataset/user_taglist.csv', parse_dates=['insertdate'])
+user_tag_df = pd.read_csv(open(path+"user_taglist.csv",encoding='utf8'), parse_dates=['insertdate'])
 user_tag_df.rename(columns={'insertdate': 'tag_insert_date'}, inplace=True)
 user_tag_df = user_tag_df.sort_values(by='tag_insert_date', ascending=False).drop_duplicates('user_id').reset_index(drop=True)
 df = df.merge(user_tag_df, on='user_id', how='left')
 
 # 历史记录表能做的特征远不止这些
-repay_log_df = pd.read_csv('dataset/user_repay_logs.csv', parse_dates=['due_date', 'repay_date'])
+repay_log_df = pd.read_csv(open(path+"user_repay_logs.csv",encoding='utf8'), parse_dates=['due_date', 'repay_date'])
 # 由于题目任务只预测第一期的还款情况，因此这里只保留第一期的历史记录。当然非第一期的记录也能提取很多特征。
 repay_log_df = repay_log_df[repay_log_df['order_id'] == 1].reset_index(drop=True)
 repay_log_df['repay'] = repay_log_df['repay_date'].astype('str').apply(lambda x: 1 if x != '2200-01-01' else 0)
@@ -86,7 +86,7 @@ repay_log_df = repay_log_df.merge(
 del repay_log_df['repay'], repay_log_df['early_repay_days'], repay_log_df['due_amt']
 repay_log_df = repay_log_df.drop_duplicates('user_id').reset_index(drop=True)
 df = df.merge(repay_log_df, on='user_id', how='left')
-
+###########################
 cate_cols = ['gender', 'cell_province', 'id_province', 'id_city']
 for f in cate_cols:
     df[f] = df[f].map(dict(zip(df[f].unique(), range(df[f].nunique())))).astype('int32')
@@ -114,10 +114,10 @@ train_values, test_values = df[:train_num], df[train_num:]
 
 print(train_values.shape)
 # 五折验证也可以改成一次验证，按时间划分训练集和验证集，以避免由于时序引起的数据穿越问题。
-skf = StratifiedKFold(n_splits=1, shuffle=True, random_state=2019)
+skf = StratifiedKFold(n_splits=2, shuffle=True, random_state=2019)
 clf = LGBMClassifier(
     learning_rate=0.05,
-    n_estimators=10000,
+    n_estimators=10,
     subsample=0.8,
     subsample_freq=1,
     colsample_bytree=0.8,
@@ -143,6 +143,7 @@ for i, (trn_idx, val_idx) in enumerate(skf.split(train_values, clf_labels)):
     # shepe = (-1, 33)
     val_pred_prob_everyday = clf.predict_proba(val_x, num_iteration=clf.best_iteration_)
     prob_oof[val_idx] = val_pred_prob_everyday
+    #33全部展开
     val_pred_prob_today = [val_pred_prob_everyday[i][val_y[i]] for i in range(val_pred_prob_everyday.shape[0])]
     val_pred_repay_amt = val_due_amt['due_amt'].values * val_pred_prob_today
     print('val rmse:', np.sqrt(mean_squared_error(val_repay_amt, val_pred_repay_amt)))
@@ -160,7 +161,7 @@ print('cv acc:', accuracy_score(clf_labels, np.argmax(prob_oof, axis=1)))
 prob_cols = ['prob_{}'.format(i) for i in range(33)]
 for i, f in enumerate(prob_cols):
     sub[f] = test_pred_prob[:, i]
-sub_example = pd.read_csv('dataset/submission.csv', parse_dates=['repay_date'])
+sub_example = pd.read_csv(open(path+"submission.csv",encoding='utf8'), parse_dates=['repay_date'])
 sub_example = sub_example.merge(sub, on='listing_id', how='left')
 sub_example['days'] = (sub_example['repay_date'] - sub_example['auditing_date']).dt.days
 # shape = (-1, 33)

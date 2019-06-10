@@ -8,8 +8,10 @@
 import pandas as pd
 import numpy as np
 
-path = "F:/数据集/1906拍拍/"
-outpath = "F:/数据集处理/1906拍拍/"
+# path = "F:/数据集/1906拍拍/"
+# outpath = "F:/数据集处理/1906拍拍/"
+path = "/data/dev/lm/paipai/ori_data/"
+outpath = "/data/dev/lm/paipai/feature/"
 # Y指标基础表
 train = pd.read_csv(open(path+"train.csv",encoding='utf8')) #100W
 test = pd.read_csv(open(path+"test.csv",encoding='utf8')) #13W
@@ -77,4 +79,6 @@ basic["y_is_last_date"] = basic["y_date_diff"].apply(lambda x:1 if x==0 else 0)
 #二分类问题 是否逾期
 basic["y_is_overdue"] = basic["y_date_diff"].apply(lambda x:1 if x==-1 else 0)
 
+del basic["due_date_d"]
+del basic["repay_date_d"]
 basic.to_csv(outpath+'feature_basic.csv',index=None)

@@ -9,26 +9,26 @@ import pandas as pd
 import numpy as np
 import gc
 
-path = "F:/数据集/1906拍拍/"
-outpath = "F:/数据集处理/1906拍拍/"
+# path = "F:/数据集/1906拍拍/"
+# outpath = "F:/数据集处理/1906拍拍/"
+path = "/data/dev/lm/paipai/ori_data/"
+outpath = "/data/dev/lm/paipai/feature/"
 # Y指标基础表
-basic = pd.read_csv(open(outpath + "feature_main_key.csv", encoding='utf8'))
+basic = pd.read_csv(open(outpath + "feature_main_key.csv", encoding='utf8'),parse_dates=['auditing_date'])
 
-user_info = pd.read_csv(open(path+"user_info.csv",encoding='utf8'))
-user_taglist = pd.read_csv(open(path+"user_taglist.csv",encoding='utf8'))
+user_info = pd.read_csv(open(path+"user_info.csv",encoding='utf8'),parse_dates=['insertdate'])
+user_taglist = pd.read_csv(open(path+"user_taglist.csv",encoding='utf8'),parse_dates=['insertdate'])
 
 #user_info
 basic = basic.merge(user_info,how='left',on='user_id')
-basic["auditing_date"] = pd.to_datetime(basic["auditing_date"])
-basic["insertdate"] = pd.to_datetime(basic["insertdate"])
 basic = basic.loc[basic["insertdate"]<basic["auditing_date"]]
-basic = basic.sort_values(["user_id", "listing_id","insertdate"])
-basic["rank"] = basic.groupby(["user_id","listing_id"])["insertdate"].rank(ascending=False)
-basic = basic.loc[basic["rank"]==1]
+basic = basic.sort_values(["user_id", "listing_id","insertdate"],ascending=[True,True,False])
+# basic["rank"] = basic.groupby(["user_id","listing_id"])["insertdate"].rank(ascending=False)
+# basic = basic.loc[basic["rank"]==1]
+basic = basic.drop_duplicates(['user_id',"listing_id"]).reset_index(drop=True) #去重，保留出现的第条数据
 #1个用户可能有多条数据，需要卡时间
 user_taglist["taglist"] = user_taglist["taglist"].apply(lambda x:x.split("|"))
 user_taglist["tag_cnt"] = user_taglist["taglist"].apply(lambda x:len(x))
-user_taglist["insertdate"] = pd.to_datetime(user_taglist["insertdate"])
 
 basic = basic.merge(user_taglist,how='left',on=['user_id',"insertdate"])
 
@@ -50,7 +50,6 @@ basic['id_province'] = basic['id_province'].apply(lambda x:trans_province(x))
 
 del basic["reg_mon"]
 del basic["insertdate"]
-del basic["rank"]
 dic = {}
 for i in basic.columns:
     if i not in ["user_id","listing_id","auditing_date"]:
