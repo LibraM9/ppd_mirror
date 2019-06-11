@@ -8,7 +8,7 @@
 import pandas as pd
 import numpy as np
 import gc
-from scipy.stats import kurtosis #峰度
+from scipy.stats import kurtosis  # 峰度
 from dateutil.relativedelta import relativedelta
 
 # path = "F:/数据集/1906拍拍/"
@@ -16,50 +16,92 @@ from dateutil.relativedelta import relativedelta
 path = "/data/dev/lm/paipai/ori_data/"
 outpath = "/data/dev/lm/paipai/feature/"
 # Y指标基础表
-basic = pd.read_csv(open(outpath + "feature_basic.csv", encoding='utf8'), parse_dates=['auditing_date', 'due_date', 'repay_date'])
+basic = pd.read_csv(open(outpath + "feature_basic.csv", encoding='utf8'),
+                    parse_dates=['auditing_date', 'due_date', 'repay_date'])
 basic["auditing_date_last3"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+3))
 basic["auditing_date_last6"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+6))
 basic["auditing_date_last9"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+9))
+basic["basic_day_of_week"] = basic["auditing_date"].dt.dayofweek  # 周一为0，周日为6
+basic["basic_day_of_month"] = basic["auditing_date"].dt.day  # 借款日
+basic["basic_day_of_week_due"] = basic["due_date"].dt.dayofweek  # 还款周几
 basic = basic.sort_values(["user_id", "listing_id"])
 
-#平均每天还款金额
-basic["m_days"] = (basic["due_date"]-basic["auditing_date"]).dt.days
-basic["due_amt_every_day"] = basic["due_amt"]/basic["m_days"]
+# 平均每天还款金额
+basic["basic_m_days"] = (basic["due_date"] - basic["auditing_date"]).dt.days
+basic["basic_due_amt_every_day"] = basic["due_amt"] / basic["basic_m_days"]
 # 近3/6/9个月特征
 agg = {
-    "due_amt": ["count", "max", "min","mean","std", 'median',"sum"],
-    'y_date_diff': ['max', 'min', 'mean',"std",'median'],
-    'y_date_diff_bin': ['max', 'min', 'mean',"std",'median'],
-    'y_is_last_date': ['sum', 'mean',"std"],
-    'y_is_overdue': ["sum", 'mean',"std"]
+    "due_amt": ["count", "max", "min", "mean", "std", 'median', "sum"],
+    'y_date_diff': ['max', 'min', 'mean', "std", 'median'],
+    'y_date_diff_bin': ['max', 'min', 'mean', "std", 'median'],
+    'y_is_last_date': ['sum', 'mean', "std"],
+    'y_is_overdue': ["sum", 'mean', "std"]
 }
-#左连接筛选卡时间
-basic_info = basic[['user_id', 'listing_id', 'auditing_date', 'due_date', 'due_amt',
-       'repay_date', 'repay_amt', 'auditing_month', 'y_date_diff',
-       'y_date_diff_bin', 'y_date_diff_bin3', 'y_is_last_date', 'y_is_overdue']]
-basic_info = basic_info.rename(columns={'listing_id':'listing_id_info','auditing_date':'auditing_date_info'})
-basic = basic[["user_id","listing_id","auditing_date","auditing_date_last3","auditing_date_last6","auditing_date_last9","m_days","due_amt_every_day"]]
-basic_union = basic.merge(basic_info,how='left',on='user_id')
+# 左连接筛选卡时间
+basic_info = basic[['user_id', 'listing_id', 'auditing_date', 'due_amt',
+                    'repay_date', 'repay_amt', 'auditing_month', 'y_date_diff',
+                    'y_date_diff_bin', 'y_date_diff_bin3', 'y_is_last_date', 'y_is_overdue']]
+basic_info = basic_info.rename(columns={'listing_id': 'listing_id_info', 'auditing_date': 'auditing_date_info'})
+basic = basic[
+    ["user_id", "listing_id", "auditing_date", "auditing_date_last3", "auditing_date_last6", "auditing_date_last9",
+     "due_date"
+        , "basic_m_days", "basic_due_amt_every_day", "basic_day_of_week", "basic_day_of_month",
+     "basic_day_of_week_due"]]
+basic_union = basic.merge(basic_info, how='left', on='user_id')
 print(basic_union.shape)
-for month in [3,6,9]:
+for month in [3, 6, 9]:
     print(month)
 
-    basic_tmp = basic_union.loc[(basic_union["auditing_date_info"]<basic_union["auditing_date"])&(
-            basic_union["auditing_date_info"]>=basic_union["auditing_date_last{}".format(month)])]
-    basic_tmp = basic_tmp.groupby(["user_id","listing_id"], as_index=False).agg(agg)
+    basic_tmp = basic_union.loc[(basic_union["auditing_date_info"] < basic_union["auditing_date"]) & (
+            basic_union["auditing_date_info"] >= basic_union["auditing_date_last{}".format(month)])]
+    basic_tmp = basic_tmp.groupby(["user_id", "listing_id"], as_index=False).agg(agg)
     basic_tmp.columns = ['basic_last{}_'.format(month) + i[0] + '_' + i[1] for i in basic_tmp.columns]
-    basic_tmp = basic_tmp.rename(columns={"basic_last{}_user_id_".format(month):"user_id","basic_last{}_listing_id_".format(month):"listing_id"})
-    basic = basic.merge(basic_tmp,how='left',on=["user_id","listing_id"])
+    basic_tmp = basic_tmp.rename(columns={"basic_last{}_user_id_".format(month): "user_id",
+                                          "basic_last{}_listing_id_".format(month): "listing_id"})
+    basic = basic.merge(basic_tmp, how='left', on=["user_id", "listing_id"])
 
-#当前金额占3/6/9金额比值
-basic = basic.merge(basic_info[['listing_id_info','due_amt']],how='left',left_on='listing_id',right_on='listing_id_info')
-basic["basic_amt_ratio_last3"]=basic["due_amt"]/basic['basic_last3_due_amt_sum']
-basic["basic_amt_ratio_last6"]=basic["due_amt"]/basic['basic_last6_due_amt_sum']
-basic["basic_amt_ratio_last9"]=basic["due_amt"]/basic['basic_last9_due_amt_sum']
+# 当前金额占3/6/9金额比值
+basic = basic.merge(basic_info[['listing_id_info', 'due_amt']], how='left', left_on='listing_id',
+                    right_on='listing_id_info')
+basic["basic_amt_ratio_last3"] = basic["due_amt"] / basic['basic_last3_due_amt_sum']
+basic["basic_amt_ratio_last6"] = basic["due_amt"] / basic['basic_last6_due_amt_sum']
+basic["basic_amt_ratio_last9"] = basic["due_amt"] / basic['basic_last9_due_amt_sum']
+
+
+# 账单日据1/5/6/10/15/16/20/21/25/26天数差
+# 账单日前1/5/6/10/15/16/20/21/25/26星期几
+def find_diff(date, day):
+    """
+    计算date到当月某日的时间差，若为正则返回，若为负则计算和上个月的时间差
+    :param date: 当前日期
+    :param day: 最近的某一日
+    :return: 当前日期到最近的某一日的时间差
+    """
+    date_last = date - relativedelta(months=+1)
+    date1 = pd.to_datetime(str(date)[:8] + day)
+    date2 = pd.to_datetime(str(date_last)[:8] + day)
+    diff = (date - date1).days
+    if diff >= 0:
+        return date1
+    else:
+        return date2
+
+
+for day in ['01', '05', '06', '10', '15', '16', '20', '21', '25', '26']:
+    print(day)
+    basic['basic_due_date_to{}'.format(day)] = basic["due_date"].apply(lambda x: find_diff(x, day))
+
+for day in ['01', '05', '06', '10', '15', '16', '20', '21', '25', '26']:
+    print(day)  # 周几 相差几天
+    basic['basic_due_date_to{}_week'.format(day)] = basic['basic_due_date_to{}'.format(day)].dt.dayofweek
+    basic['basic_due_date_to{}_diff'.format(day)] = (
+                basic["due_date"] - basic['basic_due_date_to{}'.format(day)]).dt.days
+    del basic['basic_due_date_to{}'.format(day)]
 
 del basic["auditing_date_last3"]
 del basic["auditing_date_last6"]
 del basic["auditing_date_last9"]
+del basic["due_date"]
 del basic["listing_id_info"]
 del basic["due_amt"]
-basic.to_csv(outpath+'feature_basic_train.csv',index=None)
+basic.to_csv(outpath + 'feature_basic_train.csv', index=None)

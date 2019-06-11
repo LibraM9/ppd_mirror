@@ -10,12 +10,12 @@ test 2019.2.1~2019.3.31
 import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
 
-oripath = "F:/数据集/1906拍拍/"
-inpath = "F:/数据集处理/1906拍拍/"
-outpath = "F:/项目相关/1906拍拍/out/"
-# oripath = "/data/dev/lm/paipai/ori_data/"
-# inpath = "/data/dev/lm/paipai/feature/"
-# outpath = "/data/dev/lm/paipai/out/"
+# oripath = "F:/数据集/1906拍拍/"
+# inpath = "F:/数据集处理/1906拍拍/"
+# outpath = "F:/项目相关/1906拍拍/out/"
+oripath = "/data/dev/lm/paipai/ori_data/"
+inpath = "/data/dev/lm/paipai/feature/"
+outpath = "/data/dev/lm/paipai/out/"
 
 df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
 df_train = pd.read_csv(open(inpath + "feature_basic_train.csv", encoding='utf8'))
@@ -23,14 +23,16 @@ df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs.csv", encodi
 df_listing_info = pd.read_csv(open(inpath + "feature_listing_info.csv", encoding='utf8'))
 df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs.csv", encoding='utf8'))
 df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag.csv", encoding='utf8'))
+df_other = pd.read_csv(open(inpath + "feature_other.csv", encoding='utf8'))
 #合并所有特征
 df = df_basic.merge(df_train,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_behavior_logs,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_listing_info,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_repay_logs,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_user_info_tag,how='left',on=['user_id','listing_id','auditing_date'])
+df = df.merge(df_other,how='left',on=['user_id','listing_id','auditing_date'])
 #调整多分类y
-df["y_date_diff"] = df["y_date_diff"].replace(-1,32)
+df["y_date_diff"] = df["y_date_diff"].replace(-1,32) #0~31
 df["y_date_diff_bin"] = df["y_date_diff_bin"].replace(-1,9)
 df["y_date_diff"] = df["y_date_diff"].replace(-1,2)
 print(df.shape)
@@ -64,7 +66,7 @@ param = {'objective': 'multiclass',
          'num_leaves': 31,
          'min_data_in_leaf': 25,
          'max_depth': 5,  # 7
-         'learning_rate': 0.01,
+         'learning_rate': 0.02,
          'lambda_l1': 0.13,
          "boosting": "gbdt",
          "feature_fraction": 0.85,
@@ -93,7 +95,7 @@ for fold_, (trn_idx, val_idx) in enumerate(folds.split(train[features], train[y]
 
     num_round = 2000
     clf = lgb.train(param, trn_data, num_round, valid_sets=[trn_data, val_data], verbose_eval=100,
-                    early_stopping_rounds=10,categorical_feature=catgory_feature)
+                    early_stopping_rounds=50,categorical_feature=catgory_feature)
     #n*33矩阵
     val_pred_prob_everyday = clf.predict(train.iloc[val_idx][features], num_iteration=clf.best_iteration)
     oof[val_idx] = val_pred_prob_everyday
@@ -133,6 +135,8 @@ train_dic = {
 }
 for key in train_dic:
     train_prob[key] = train_dic[key]
+for i in range(n-1):
+    train_prob[i] = train_prob[i]*train_prob["due_amt"]
 #test
 test_prob = pd.DataFrame(predictions)
 test_dic = {
@@ -147,8 +151,6 @@ for key in test_dic:
 for i in range(n-1):
     test_prob[i] = test_prob[i]*test_prob["due_amt"]
 #评价
-
-#提交
 def df_rank(df_prob, df_sub):
     for i in range(33):
         df_tmp = df_prob[['listing_id', i]]
@@ -156,28 +158,15 @@ def df_rank(df_prob, df_sub):
         df_sub = df_sub.merge(df_tmp,how='left',on=["listing_id",'rank'])
         df_sub.loc[df_sub['rank']==i+1,'repay_amt']=df_sub.loc[df_sub['rank']==i+1,i]
     return df_sub[['listing_id','repay_amt','repay_date']]
-submission = pd.read_csv(open(oripath+"submission.csv",encoding='utf8'))
-submission['repay_date'] = pd.to_datetime(submission['repay_date'])
+#
+submission_train =pd.read_csv(open(inpath+"submission.csv",encoding='utf8'),parse_dates=["repay_date"])
+submission_train['rank'] = submission_train.groupby('listing_id')['repay_date'].rank(ascending=False,method='first')
+sub_train = df_rank(train_prob, submission_train)
+sub_train = sub_train.merge(submission_train,how='left',on=['listing_id','repay_date'])
+print('rmse_real:', np.sqrt(mean_squared_error(sub_train['repay_amt_x'], sub_train['repay_amt_y'])))
+#提交
+submission = pd.read_csv(open(oripath+"submission.csv",encoding='utf8'),parse_dates=["repay_date"])
 submission['rank'] = submission.groupby('listing_id')['repay_date'].rank(ascending=False,method='first')
 sub = df_rank(test_prob, submission)
 sub.to_csv(outpath+'sub_lgb_33_0609.csv',index=None)
 
-# #train mse文件构建,太耗内存无法运行
-# from dateutil.relativedelta import relativedelta
-# date_lst = []
-# listing_lst = []
-# n = 0
-# for id in train["listing_id"]:
-#     n = n+1
-#     print(n)
-#     temp_lst = [id]*365
-#     listing_lst.extend(temp_lst)
-# train_date = pd.DataFrame({"listing_id":listing_lst,"repay_date":date_lst})
-# train["auditing_date"] = pd.to_datetime(train["auditing_date"])
-# train["due_date"] = pd.to_datetime(train["due_date"])
-# train["repay_date"] = pd.to_datetime(train["repay_date"])
-# train_date = train_date.merge(train[["listing_id","auditing_date","due_date"]],how='left',on="listing_id")
-# train_date = train_date.loc[(train_date['repay_date']>=train_date['auditing_date'])&(train_date['repay_date']<=train_date['due_date'])]
-# train_date = train_date.merge(train[["listing_id","repay_date","repay_amt"]],how='left',on=["listing_id","repay_date"])
-# train_date = train_date.dillna(0)
-# train_date.to_csv(inpath+'submission_train.csv',index=None)

@@ -106,3 +106,36 @@ for i in range(user_taglist.shape[0]):
     ans = ans.union(set(user_taglist["taglist"][i]))
 print(len(ans))
 
+###################构建一个训练集全还款记录，用以求mse
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+inpath = "/data/dev/lm/paipai/feature/"
+oripath = "/data/dev/lm/paipai/ori_data/"
+train = pd.read_csv(open(oripath+"train.csv",encoding='utf8'))
+train.loc[train["repay_date"]=='\\N','repay_date']=train.loc[train["repay_date"]=='\\N','due_date']
+train["repay_amt"] = train["repay_amt"].replace('\\N',0)
+train["auditing_date"] = pd.to_datetime(train["auditing_date"])
+train["due_date"] = pd.to_datetime(train["due_date"])
+train["repay_date"] = pd.to_datetime(train["repay_date"])
+#train mse文件构建,太耗内存无法运行
+from dateutil.relativedelta import relativedelta
+date_lst = [pd.to_datetime('2018-01-01')+ relativedelta(days=+i) for i in range(365)]
+date_lst = date_lst*train.shape[0]
+listing_lst = []
+n = 0
+for id in train["listing_id"]:
+    n = n+1
+    print(n)
+    temp_lst = [id]*365
+    listing_lst.extend(temp_lst)
+train_date = pd.DataFrame({"listing_id":listing_lst,"repay_date":date_lst})
+
+train_date = train_date.merge(train[["listing_id","auditing_date","due_date"]],how='left',on="listing_id")
+train_date = train_date.loc[(train_date['repay_date']>=train_date['auditing_date'])&(train_date['repay_date']<=train_date['due_date'])]
+
+train_date = train_date.merge(train[["listing_id","repay_date","repay_amt"]],how='left',on=["listing_id","repay_date"])
+train_date = train_date.fillna(0)
+train_date[["listing_id","repay_date","repay_amt"]].to_csv(inpath+'submission_train.csv',index=None)
