@@ -1,21 +1,20 @@
 # -*- coding: utf-8 -*-
-#@author: limeng
-#@file: 3model.py
-#@time: 2019/6/7 16:59
+# @Author: limeng
+# @File  : 3model_is_last_date.py
+# @time  : 2019/6/12
 """
-文件说明：整合特征建模,33分类
-train 2018.1.1~2018.12.31
-test 2019.2.1~2019.3.31
+文件说明：二分类问题，判断是否最后一天还款
 """
 import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
+import gc
 
-# oripath = "F:/数据集/1906拍拍/"
-# inpath = "F:/数据集处理/1906拍拍/"
-# outpath = "F:/项目相关/1906拍拍/out/"
-oripath = "/data/dev/lm/paipai/ori_data/"
-inpath = "/data/dev/lm/paipai/feature/"
-outpath = "/data/dev/lm/paipai/out/"
+oripath = "F:/数据集/1906拍拍/"
+inpath = "F:/数据集处理/1906拍拍/"
+outpath = "F:/项目相关/1906paipai/sub/"
+# oripath = "/data/dev/lm/paipai/ori_data/"
+# inpath = "/data/dev/lm/paipai/feature/"
+# outpath = "/data/dev/lm/paipai/out/"
 
 df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
 print(df_basic.shape)
@@ -64,36 +63,43 @@ for col in df.columns:
         features.append(col)
 catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province",
                    "user_info_tag_is_province_equal"]
-y = "y_date_diff"
-n = 33 #分类数量，和y有关
-#开始训练
+y = "y_is_last_date"
+
+del df_basic
+del df_train
+del df_behavior_logs
+del df_listing_info
+del df_repay_logs
+del df_user_info_tag
+del df_other
+gc.collect()
+#开始训练 rf 0.61919 gbdt
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import log_loss
 import lightgbm as lgb
 import numpy as np
 
-param = {'objective': 'multiclass',
-         'num_class':n,
-         'num_leaves': 34,
-         'min_data_in_leaf': 25,
-         'max_depth': 5,  # 7
-         'learning_rate': 0.02,
-         'lambda_l1': 0.13,
+param = {'num_leaves': 34,
+         'min_data_in_leaf': 30,
+         'objective': 'binary',
+         'max_depth': 5,
+         'learning_rate': 0.01,
          "boosting": "gbdt",
-         "feature_fraction": 0.85,
-         'bagging_freq': 8,
+         "feature_fraction": 0.9,
+         "bagging_freq": 1,
          "bagging_fraction": 0.9,
-         "metric": 'multi_logloss',
+         "bagging_seed": 11,
+         "metric": 'binary_logloss',
+         "lambda_l1": 0.1,
          "verbosity": -1,
-         "random_state": 2333}
+         "random_state": 2333,
+        'is_unbalance': True}
 
 folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=2333)
 # folds = KFold(n_splits=5, shuffle=True, random_state=2333)
-amt_labels = train['repay_amt'].values  # 真实还款
-amt_oof = np.zeros(train.shape[0])
-oof = np.zeros((len(train),n))
-predictions = np.zeros((len(test),n))
+oof = np.zeros(len(train))
+predictions = np.zeros(len(test))
 feature_importance_df = pd.DataFrame()
 
 for fold_, (trn_idx, val_idx) in enumerate(folds.split(train[features], train[y].values)):
@@ -105,82 +111,31 @@ for fold_, (trn_idx, val_idx) in enumerate(folds.split(train[features], train[y]
                            label=train[y].iloc[val_idx],
                            categorical_feature=catgory_feature)
 
-    num_round = 1500
+    num_round = 5000
     clf = lgb.train(param, trn_data, num_round, valid_sets=[trn_data, val_data], verbose_eval=50,
-                    early_stopping_rounds=20,categorical_feature=catgory_feature)
-    #n*33矩阵
-    val_pred_prob_everyday = clf.predict(train.iloc[val_idx][features], num_iteration=clf.best_iteration)
-    oof[val_idx] = val_pred_prob_everyday
-    # 将y全部展开，用应还金额*预测概率，求mse/mae
-    val_y = train[y].values[val_idx] #真实label
-    val_due_amt = train[["due_amt"]].iloc[val_idx] #应还款
-    val_pred_prob_today = [val_pred_prob_everyday[i][val_y[i]] for i in range(val_pred_prob_everyday.shape[0])]#预测还款在应还日的概率
+                    early_stopping_rounds=100,categorical_feature=catgory_feature)
 
-    val_pred_repay_amt = val_due_amt['due_amt'].values * val_pred_prob_today #应还日的预测还款
-
-    val_repay_amt = amt_labels[val_idx]
-    amt_oof[val_idx] = val_pred_repay_amt
-    print('val rmse:', np.sqrt(mean_squared_error(val_repay_amt, val_pred_repay_amt)))
-    print('val mae:', mean_absolute_error(val_repay_amt, val_pred_repay_amt))
+    oof[val_idx] = clf.predict(train.iloc[val_idx][features], num_iteration=clf.best_iteration)
 
     fold_importance_df = pd.DataFrame()
-    fold_importance_df["Feature"] = features
+    fold_importance_df["feature"] = features
     fold_importance_df["importance"] = clf.feature_importance()
     fold_importance_df["fold"] = fold_ + 1
     feature_importance_df = pd.concat([feature_importance_df, fold_importance_df], axis=0)
 
     predictions += clf.predict(test[features], num_iteration=clf.best_iteration) / folds.n_splits
 
-print('cv rmse:', np.sqrt(mean_squared_error(amt_labels, amt_oof)))
-print('cv mae:', mean_absolute_error(amt_labels, amt_oof))
-print("CV score: {:<8.5f}".format(log_loss(train[y], oof)))
-feature_importance = feature_importance_df[["Feature", "importance"]].groupby("Feature").mean().sort_values(by="importance",
+print("CV score: {:<8.5f}".format(log_loss(train[y].values, oof)))
+feature_importance = feature_importance_df[["feature", "importance"]].groupby("feature").mean().sort_values(by="importance",
 ascending=False)
-feature_importance.to_csv(outpath+"importance_33_0613.csv")
-#train
-train_prob = pd.DataFrame(oof)
-train_dic = {
-    "user_id": train["user_id"].values,
-    "listing_id":train["listing_id"].values,
-    "auditing_date":train["auditing_date"].values,
-    "due_date":train["due_date"].values,
-    "due_amt":train["due_amt"].values,
-}
-for key in train_dic:
-    train_prob[key] = train_dic[key]
-for i in range(n-1):
-    train_prob[i] = train_prob[i]*train_prob["due_amt"]
-#test
-test_prob = pd.DataFrame(predictions)
+
+feature_importance.to_csv(outpath+"importance_is_last_late.csv")
+#测试集最后一天还款概率
 test_dic = {
     "user_id": test["user_id"].values,
     "listing_id":test["listing_id"].values,
     "auditing_date":test["auditing_date"].values,
-    "due_date":test["due_date"].values,
-    "due_amt":test["due_amt"].values,
 }
-for key in test_dic:
-    test_prob[key] = test_dic[key]
-for i in range(n-1):
-    test_prob[i] = test_prob[i]*test_prob["due_amt"]
-#对于训练集评价
-def df_rank(df_prob, df_sub):
-    for i in range(33):
-        print('转换中',i)
-        df_tmp = df_prob[['listing_id', i]]
-        df_tmp['rank'] = i+1
-        df_sub = df_sub.merge(df_tmp,how='left',on=["listing_id",'rank'])
-        df_sub.loc[df_sub['rank']==i+1,'repay_amt']=df_sub.loc[df_sub['rank']==i+1,i]
-    return df_sub[['listing_id','repay_amt','repay_date']]
-#
-# submission_train =pd.read_csv(open(inpath+"submission_train.csv",encoding='utf8'),parse_dates=["repay_date"])
-# submission_train['rank'] = submission_train.groupby('listing_id')['repay_date'].rank(ascending=False,method='first')
-# sub_train = df_rank(train_prob, submission_train)
-# sub_train = sub_train.merge(submission_train,how='left',on=['listing_id','repay_date'])
-# print('mse_real:', mean_squared_error(sub_train['repay_amt_x'], sub_train['repay_amt_y']))
-#提交
-submission = pd.read_csv(open(oripath+"submission.csv",encoding='utf8'),parse_dates=["repay_date"])
-submission['rank'] = submission.groupby('listing_id')['repay_date'].rank(ascending=False,method='first')
-sub = df_rank(test_prob, submission)
-sub.to_csv(outpath+'sub_lgb_33_0613.csv',index=None)
-
+test_prob = pd.DataFrame(test_dic)
+test_prob["last_date"] = predictions
+test_prob.to_csv(outpath+"is_last_date0613.csv",index=None)
