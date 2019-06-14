@@ -74,7 +74,7 @@ del df_repay_logs
 del df_user_info_tag
 del df_other
 gc.collect()
-#开始训练
+#开始训练 0.74346
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import log_loss, roc_auc_score
