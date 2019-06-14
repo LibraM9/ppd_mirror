@@ -79,6 +79,12 @@ basic["y_is_last_date"] = basic["y_date_diff"].apply(lambda x:1 if x==0 else 0)
 #二分类问题 是否逾期
 basic["y_is_overdue"] = basic["y_date_diff"].apply(lambda x:1 if x==-1 else 0)
 
+for i in range(32):
+    if i==0:
+        continue
+    else:
+        basic["y_is_{}".format(i)]=basic["y_date_diff"].apply(lambda x:1 if x==i else 0)
+
 del basic["due_date_d"]
 del basic["repay_date_d"]
 basic.to_csv(outpath+'feature_basic.csv',index=None)

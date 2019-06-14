@@ -9,12 +9,12 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
 import gc
 
-oripath = "F:/数据集/1906拍拍/"
-inpath = "F:/数据集处理/1906拍拍/"
-outpath = "F:/项目相关/1906paipai/sub/"
-# oripath = "/data/dev/lm/paipai/ori_data/"
-# inpath = "/data/dev/lm/paipai/feature/"
-# outpath = "/data/dev/lm/paipai/out/"
+# oripath = "F:/数据集/1906拍拍/"
+# inpath = "F:/数据集处理/1906拍拍/"
+# outpath = "F:/项目相关/1906paipai/sub/"
+oripath = "/data/dev/lm/paipai/ori_data/"
+inpath = "/data/dev/lm/paipai/feature/"
+outpath = "/data/dev/lm/paipai/out/"
 
 df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
 print(df_basic.shape)
@@ -55,8 +55,9 @@ print(test.shape)
 
 #无法入模的特征和y
 del_feature = ["user_id","listing_id","auditing_date","due_date","repay_date","repay_amt"
-                ,"user_info_tag_id_city","user_info_tag_taglist","dead_line"
-            ,"y_date_diff","y_date_diff_bin","y_date_diff_bin3","y_is_overdue","y_is_last_date"]
+                ,"user_info_tag_id_city","user_info_tag_taglist","dead_line"]
+y_list = [i  for i in df.columns if i[:2]=='y_']
+del_feature.extend(y_list)
 features = []
 for col in df.columns:
     if col not in del_feature:
@@ -73,29 +74,44 @@ del df_repay_logs
 del df_user_info_tag
 del df_other
 gc.collect()
-#开始训练  gbdt
+#开始训练  auc 0.7627
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
-from sklearn.metrics import log_loss
+from sklearn.metrics import log_loss,roc_auc_score
 import lightgbm as lgb
 import numpy as np
 
-param = {'num_leaves': 34,
-         'min_data_in_leaf': 30,
-         'objective': 'binary',
+# param = {'num_leaves': 100,
+#          'min_data_in_leaf': 30,
+#          'objective': 'binary',
+#          'max_depth': 6,
+#          'learning_rate': 0.01,
+#          "boosting": "gbdt",
+#          "feature_fraction": 0.9,
+#          "bagging_freq": 1,
+#          "bagging_fraction": 0.9,
+#          "bagging_seed": 11,
+#          "metric": 'binary_logloss',
+#          "lambda_l1": 0.1,
+#          "verbosity": -1,
+#          "random_state": 2333,
+#         'is_unbalance': True}
+param ={'num_leaves': 2**5,
+         'min_data_in_leaf': 32,
+         'objective':'binary',
          'max_depth': 5,
-         'learning_rate': 0.01,
+         'learning_rate': 0.03,
+         "min_child_samples": 20,
          "boosting": "gbdt",
-         "feature_fraction": 0.9,
+         "feature_fraction": 0.8,
          "bagging_freq": 1,
-         "bagging_fraction": 0.9,
+         "bagging_fraction": 0.8,
          "bagging_seed": 11,
-         "metric": 'binary_logloss',
-         "lambda_l1": 0.1,
-         "verbosity": -1,
-         "random_state": 2333,
-        'is_unbalance': True}
-
+         "metric": 'auc',
+         "lambda_l1": 0.5,
+          "verbosity": -1,
+        'is_unbalance': True
+        }
 folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=2333)
 # folds = KFold(n_splits=5, shuffle=True, random_state=2333)
 oof = np.zeros(len(train))
@@ -126,16 +142,18 @@ for fold_, (trn_idx, val_idx) in enumerate(folds.split(train[features], train[y]
     predictions += clf.predict(test[features], num_iteration=clf.best_iteration) / folds.n_splits
 
 print("CV score: {:<8.5f}".format(log_loss(train[y].values, oof)))
+print("auc score:",roc_auc_score(train[y].values, oof))
 feature_importance = feature_importance_df[["feature", "importance"]].groupby("feature").mean().sort_values(by="importance",
 ascending=False)
 
-feature_importance.to_csv(outpath+"importance_is_last_late.csv")
+feature_importance.to_csv(outpath+"importance_is_overdue.csv")
 #测试集逾期概率
 test_dic = {
     "user_id": test["user_id"].values,
     "listing_id":test["listing_id"].values,
     "auditing_date":test["auditing_date"].values,
+    "due_amt":test["due_amt"].values,
 }
 test_prob = pd.DataFrame(test_dic)
-test_prob["last_date"] = predictions
+test_prob["overdue"] = predictions
 test_prob.to_csv(outpath+"is_overdue0613.csv",index=None)

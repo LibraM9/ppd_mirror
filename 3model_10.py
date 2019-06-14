@@ -58,8 +58,9 @@ print(test.shape)
 
 #无法入模的特征和y
 del_feature = ["user_id","listing_id","auditing_date","due_date","repay_date","repay_amt"
-                ,"user_info_tag_id_city","user_info_tag_taglist","dead_line"
-            ,"y_date_diff","y_date_diff_bin","y_date_diff_bin3","y_is_overdue","y_is_last_date"]
+                ,"user_info_tag_id_city","user_info_tag_taglist","dead_line"]
+y_list = [i  for i in df.columns if i[:2]=='y_']
+del_feature.extend(y_list)
 features = []
 for col in df.columns:
     if col not in del_feature:
