@@ -81,7 +81,7 @@ import numpy as np
 
 param = {'objective': 'multiclass',
          'num_class':n,
-         'num_leaves': 2**4,
+         'num_leaves': 2**4, #34
          'min_data_in_leaf': 32,#25
          'max_depth': 5,  # 5 2.02949 42.02981
          'learning_rate': 0.02, # 0.04 2.05467 7318
