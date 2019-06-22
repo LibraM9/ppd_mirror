@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 # @Author: limeng
-# @File  : 3model_is_overdue.py
-# @time  : 2019/6/12
+# @File  : 3model_is_mid.py
+# @time  : 2019/6/16
 """
-文件说明：二分类问题，判断是否首逾
+文件说明：3分类 找到1~31概率最高的id
 """
 import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
-import gc
 
 date = ""
 # oripath = "F:/数据集/1906拍拍/"
@@ -65,27 +64,19 @@ for col in df.columns:
         features.append(col)
 catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province",
                    "user_info_tag_is_province_equal"]
-y = "y_is_overdue"
+y = "y_is_mid"
 
-del df_basic
-del df_train
-del df_behavior_logs
-del df_listing_info
-del df_repay_logs
-del df_user_info_tag
-del df_other
-gc.collect()
-#开始训练  auc 0.7627
+#开始训练 0.7901166650464181
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
-from sklearn.metrics import log_loss,roc_auc_score
+from sklearn.metrics import log_loss, roc_auc_score
 import lightgbm as lgb
 import numpy as np
 
-# param = {'num_leaves': 100,
+# param = {'num_leaves': 34,
 #          'min_data_in_leaf': 30,
 #          'objective': 'binary',
-#          'max_depth': 6,
+#          'max_depth': 5,
 #          'learning_rate': 0.01,
 #          "boosting": "gbdt",
 #          "feature_fraction": 0.9,
@@ -102,7 +93,6 @@ param ={'num_leaves': 2**5,
          'objective':'binary',
          'max_depth': 5,
          'learning_rate': 0.03,
-         "min_child_samples": 20,
          "boosting": "gbdt",
          "feature_fraction": 0.8,
          "bagging_freq": 1,
@@ -147,8 +137,8 @@ print("auc score:",roc_auc_score(train[y].values, oof))
 feature_importance = feature_importance_df[["feature", "importance"]].groupby("feature").mean().sort_values(by="importance",
 ascending=False)
 
-feature_importance.to_csv(outpath+"importance_is_overdue.csv")
-#测试集逾期概率
+feature_importance.to_csv(outpath+"importance_is_mid.csv")
+#测试集最后一天还款概率
 test_dic = {
     "user_id": test["user_id"].values,
     "listing_id":test["listing_id"].values,
@@ -156,5 +146,5 @@ test_dic = {
     "due_amt":test["due_amt"].values,
 }
 test_prob = pd.DataFrame(test_dic)
-test_prob["overdue"] = predictions
-test_prob.to_csv(outpath+"is_overdue0613.csv",index=None)
+test_prob["is_mid"] = predictions
+test_prob.to_csv(outpath+"is_mid0616.csv",index=None)

@@ -48,7 +48,39 @@ train['repay_amt'] = train['repay_amt'].apply(lambda x: x if x != '\\N' else 0).
 train["y_date_diff"]=train["y_date_diff"].astype(int)
 train["y_date_diff_bin"]=train["y_date_diff_bin"].astype(int)
 train["y_date_diff_bin3"]=train["y_date_diff_bin3"].astype(int)
-train = train.loc[train["y_date_diff"].isin([0,32])==False]
 test = df[df["auditing_date"]>='2019-01-01']
 print(train.shape)
 print(test.shape)
+
+#探查城市 无明显规则
+city_count = train["user_info_tag_id_city"].value_counts()
+train_city = train.drop("user_info_tag_taglist",axis=1)
+def is_last_date(df):
+    return df[df==1].count()/df.count()
+def is_overdue(df):
+    return df[df==1].count()/df.count()
+agg = {
+    "y_is_last_date":["count",is_last_date],
+    "y_is_overdue":[is_overdue]
+}
+train_city_gb = train_city.groupby("user_info_tag_id_city",as_index=False).agg(agg)
+train_city_gb.columns = [i[0]+"_"+i[1] for i in train_city_gb.columns]
+train_city_gb=train_city_gb.sort_values(by="y_is_last_date_count",ascending=False)
+# train_city = pd.get_dummies(train, columns=['user_info_tag_id_city'])
+
+#todo 探查省
+province_count = train["user_info_tag_id_province"].value_counts()
+train_province = train.drop("user_info_tag_taglist",axis=1)
+def is_last_date(df):
+    return df[df==1].count()/df.count()
+def is_overdue(df):
+    return df[df==1].count()/df.count()
+agg = {
+    "y_is_last_date":["count",is_last_date],
+    "y_is_overdue":[is_overdue]
+}
+train_province_gb = train_province.groupby("user_info_tag_id_province",as_index=False).agg(agg)
+# train_province_gb = train_province.groupby("user_info_tag_cell_province",as_index=False).agg(agg)
+train_province_gb.columns = [i[0]+"_"+i[1] for i in train_province_gb.columns]
+train_province_gb=train_province_gb.sort_values(by="y_is_last_date_count",ascending=False)
+# train_city = pd.get_dummies(train, columns=['user_info_tag_id_city'])

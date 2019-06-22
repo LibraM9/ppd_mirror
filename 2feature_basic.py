@@ -78,7 +78,8 @@ basic["y_date_diff_bin3"] = basic["y_date_diff"].apply(bin3)
 basic["y_is_last_date"] = basic["y_date_diff"].apply(lambda x:1 if x==0 else 0)
 #二分类问题 是否逾期
 basic["y_is_overdue"] = basic["y_date_diff"].apply(lambda x:1 if x==-1 else 0)
-
+#二分类问题 是否在1~31之间
+basic["y_is_mid"] = basic["y_date_diff_bin3"].apply(lambda x:1 if x==1 else 0)
 for i in range(32):
     if i==0:
         continue

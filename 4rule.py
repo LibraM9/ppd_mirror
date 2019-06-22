@@ -71,12 +71,17 @@ def cover(model_33, is_nums, threshold=None):
     model = model_33.copy()
     is_num = is_nums.copy()
     class_ratio = is_num.columns[-1]
+    if 'rank' not in model.columns:
+        model['repay_date']=pd.to_datetime(model['repay_date'])
+        model['rank'] = model.groupby(['listing_id'])['repay_date'].rank(ascending=False, method='first')
+    if 'due_amt' not in model.columns:
+        model = model.merge(test[["listing_id", "due_amt"]], how='left', on='listing_id')
     if class_ratio=="last_date":
         c = 0
     elif class_ratio=="overdue":
         c = 32
     else:
-        c = class_ratio.split("_")[-1]
+        c = int(class_ratio.split("_")[-1])
     print("对{}进行覆盖".format(c))
     is_num["rank"] = is_num[class_ratio].rank(ascending=False,method='first')
     if threshold==None:
@@ -99,6 +104,7 @@ def cover(model_33, is_nums, threshold=None):
 # auc 信息
 auc = pd.read_csv(open(outpath+"auc_model1_31.csv",encoding='utf8'))
 
+# no032
 # #对0覆盖
 # is_last_date = pd.read_csv(open(outpath+"is_last_date0613.csv",encoding='utf8')) #
 # model_33_no032 = cover(model_33_no032,is_last_date)
@@ -107,38 +113,173 @@ auc = pd.read_csv(open(outpath+"auc_model1_31.csv",encoding='utf8'))
 # model_33_no032 = cover(model_33_no032,is_overdue)
 #
 # model_33_no032[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_lgbno032_cover032_0614.csv",index=None)
-
-#对0覆盖.auc*0.5为最优 6404
+########################################
+#33模型 对0覆盖.auc*0.5为最优 6404
 n=0
 is_last_date = pd.read_csv(open(outpath+"is_last_date0613.csv",encoding='utf8')) #
-model_33 = cover(model_33,is_last_date,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+model_33 = cover(model_33,is_last_date,threshold=0.5*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
 # model_33 = cover(model_33,is_last_date)
 #对32覆盖.auc*0.5为最优
 n=32
 is_overdue = pd.read_csv(open(outpath+"is_overdue0613.csv",encoding='utf8')) #
-model_33 = cover(model_33,is_overdue,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+model_33 = cover(model_33,is_overdue,threshold=0.5*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
 # model_33 = cover(model_33,is_overdue)
 
-model_33[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_lgb_cover032_auc30_0614.csv",index=None)
-
+# model_33[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_lgb_cover032_auc50_0614.csv",index=None)
 
 #拼接model_33_no032和model_33，对最有可能为1~31的数据替换为model_33_no032
-#1. 0.408187 last_date 和 0.117192 overdue id（获得最可能为0和32的ID）
+#1. 0.408187+0.1 last_date 和 0.117192+0.05 overdue id（获得最可能为0和32的ID）
 #2. 以覆盖了auc阈值的model_33为基础，其余ID均认为是1~31的ID 拼入 model_33_no032
-last_overdue_id = []
-#0
-is_last_date["rank"] = is_last_date["last_date"].rank(ascending=False,method='first')
-threshold = int(is_last_date.shape[0]*(dic[0]+0.1))
-cover_id = list(set(is_last_date[is_last_date["rank"]<=threshold]["listing_id"]))
-last_overdue_id.extend(list(cover_id))
-#32
-is_overdue["rank"] = is_overdue["overdue"].rank(ascending=False,method='first')
-threshold = int(is_overdue.shape[0]*(dic[32]+0.05))
-cover_id = list(set(is_overdue[is_overdue["rank"]<=threshold]["listing_id"]))
-last_overdue_id.extend(list(cover_id))
-last_overdue_id = set(last_overdue_id) #76477/默认阈值63700
-model_33.loc[model_33["listing_id"].isin(last_overdue_id)==False,'repay_amt']= \
-    model_33_no032.loc[model_33_no032["listing_id"].isin(last_overdue_id)==False]['repay_amt']
-model_33[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover032_auc30_0614.csv",index=None)
-
+is_mid = pd.read_csv(open(outpath+"is_mid0616.csv",encoding='utf8'))
+is_mid["rank"] = is_mid['is_mid'].rank(ascending=False,method='first')
+threshold_mid = test.shape[0]*(1-dic[0]-dic[32])*0.79*0.5#auc0.79
+print(threshold_mid)
+mid_id = set(is_mid[is_mid["rank"]<=threshold_mid]["listing_id"])
+model_33.loc[model_33["listing_id"].isin(mid_id)==True,'repay_amt']= \
+    model_33_no032.loc[model_33_no032["listing_id"].isin(mid_id)==True]['repay_amt']
+model_33[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover032_0616.csv",index=None)
+#######################################################
 # todo 对1~31进行覆盖
+#正常训练覆盖0 32 6404
+ans1 = pd.read_csv(open(outpath+"sub_lgb_cover032_auc_0614.csv",encoding='utf8'))#6404
+ans1 = pd.read_csv(open(outpath+"sub_lgb_10_0613.csv",encoding='utf8'))#8022
+#1 0.5 6900 0.2 6523
+n=1
+is_1 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_1,threshold=0.05*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}005_0616.csv".format(n),index=None)
+
+#2
+n=2
+is_2 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_2,threshold=0.05*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}005_0616.csv".format(n),index=None)
+
+# n=3#效果不佳
+# is_3 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_3,threshold=0.05*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}005_0616.csv".format(n),index=None)
+
+n=4#
+is_4 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_4,threshold=0.1*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}01_0616.csv".format(n),index=None)
+
+n=5#
+is_5 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_5,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}02_0616.csv".format(n),index=None)
+
+n=6#
+is_6 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_6,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}02_0616.csv".format(n),index=None)
+
+n=7#
+is_7 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_7,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}02_0616.csv".format(n),index=None)
+
+n=8#
+is_8 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_8,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}02_0616.csv".format(n),index=None)
+
+n=9#
+is_9 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_9,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}02_0616.csv".format(n),index=None)
+
+n=10#
+is_10 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_10,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}03_0616.csv".format(n),index=None)
+
+n=11#
+is_11 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_11,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}03_0616.csv".format(n),index=None)
+
+n=12#
+is_12 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_12,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}02_0616.csv".format(n),index=None)
+
+n=13#未单测
+is_13 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_13,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=14#
+is_14 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_14,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=15#
+is_15 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_15,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=16#
+is_16 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_16,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+# ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}02_0616.csv".format(n),index=None)
+
+# n=17#
+# is_17 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_17,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=18#
+# is_18 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_18,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=19#
+# is_19 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_19,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=20#
+# is_20 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_20,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=21#
+# is_21 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_21,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=22#
+# is_22 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_22,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=23#
+# is_23 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_23,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=24#
+# is_24 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_24,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+#
+# n=25#
+# is_25 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+# ans1 = cover(ans1,is_25,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=26#
+is_26 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_26,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=27#
+is_27 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_27,threshold=0.2*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=28#
+is_28 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_28,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=29#
+is_29 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_29,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=30#
+is_30 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_30,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+
+n=31#
+is_31 = pd.read_csv(open(outpath+"is_{}_0614.csv".format(n),encoding='utf8')) #
+ans1 = cover(ans1,is_31,threshold=0.3*dic[n]*auc.loc[auc.model==n,'auc'].values[0])
+ans1[["listing_id","repay_amt","repay_date"]].to_csv(outpath+"sub_stack_cover{}03_0616.csv".format(n),index=None)
+

@@ -9,27 +9,28 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
 import gc
 
-oripath = "F:/数据集/1906拍拍/"
-inpath = "F:/数据集处理/1906拍拍/"
-outpath = "F:/项目相关/1906paipai/sub/"
-# oripath = "/data/dev/lm/paipai/ori_data/"
-# inpath = "/data/dev/lm/paipai/feature/"
-# outpath = "/data/dev/lm/paipai/out/"
+date = "0618"
+# oripath = "F:/数据集/1906拍拍/"
+# inpath = "F:/数据集处理/1906拍拍/"
+# outpath = "F:/项目相关/1906拍拍/out/"
+oripath = "/home/dev/lm/paipai/ori_data/"
+inpath = "/home/dev/lm/paipai/feature/"
+outpath = "/home/dev/lm/paipai/out/"
 
 df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
-print(df_basic.shape)
-df_train = pd.read_csv(open(inpath + "feature_basic_train.csv", encoding='utf8'))
-print(df_train.shape)
-df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs.csv", encoding='utf8'))
-print(df_behavior_logs.shape)
-df_listing_info = pd.read_csv(open(inpath + "feature_listing_info.csv", encoding='utf8'))
-print(df_listing_info.shape)
-df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs.csv", encoding='utf8'))
-print(df_repay_logs.shape)
-df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag.csv", encoding='utf8'))
-print(df_user_info_tag.shape)
-df_other = pd.read_csv(open(inpath + "feature_other.csv", encoding='utf8'))
-print(df_other.shape)
+print("feature_basic",df_basic.shape)
+df_train = pd.read_csv(open(inpath + "feature_basic_train{}.csv".format(date), encoding='utf8'))
+print("feature_basic_train",df_train.shape)
+df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs{}.csv".format(date), encoding='utf8'))
+print("feature_behavior_logs",df_behavior_logs.shape)
+df_listing_info = pd.read_csv(open(inpath + "feature_listing_info{}.csv".format(date), encoding='utf8'))
+print("feature_listing_info",df_listing_info.shape)
+df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs{}.csv".format(date), encoding='utf8'))
+print("feature_repay_logs",df_repay_logs.shape)
+df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag{}.csv".format(date), encoding='utf8'))
+print("feature_user_info_tag",df_user_info_tag.shape)
+df_other = pd.read_csv(open(inpath + "feature_other{}.csv".format(date), encoding='utf8'))
+print("feature_other",df_other.shape)
 #合并所有特征
 df = df_basic.merge(df_train,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_behavior_logs,how='left',on=['user_id','listing_id','auditing_date'])
@@ -55,7 +56,8 @@ print(test.shape)
 
 #无法入模的特征和y
 del_feature = ["user_id","listing_id","auditing_date","due_date","repay_date","repay_amt"
-                ,"user_info_tag_id_city","user_info_tag_taglist","dead_line"]
+                ,"user_info_tag_id_city","user_info_tag_taglist","dead_line",
+               "other_tag_pred_is_overdue", "other_tag_pred_is_last_date"]
 y_list = [i  for i in df.columns if i[:2]=='y_']
 del_feature.extend(y_list)
 features = []

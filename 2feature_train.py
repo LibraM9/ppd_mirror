@@ -24,8 +24,13 @@ basic["auditing_date_last9"] = basic["auditing_date"].apply(lambda x: x - relati
 basic["basic_day_of_week"] = basic["auditing_date"].dt.dayofweek  # 周一为0，周日为6
 basic["basic_day_of_month"] = basic["auditing_date"].dt.day  # 借款日
 basic["basic_day_of_week_due"] = basic["due_date"].dt.dayofweek  # 还款周几
+basic["basic_day_of_month_due"] = basic["due_date"].dt.day  # 还款日
 basic = basic.sort_values(["user_id", "listing_id"])
-
+basic["basic_spring_festival_diff"]=np.nan # 距春节的天数差
+basic.loc[(basic["auditing_date"]>=pd.to_datetime("2018-01-01"))&(basic["auditing_date"]<=pd.to_datetime("2018-04-15")),"basic_spring_festival_diff"]=\
+    (pd.to_datetime("2018-02-16")-basic.loc[(basic["auditing_date"]>=pd.to_datetime("2018-01-01"))&(basic["auditing_date"]<=pd.to_datetime("2018-04-15"))]["auditing_date"]).dt.days
+basic.loc[(basic["auditing_date"]>=pd.to_datetime("2019-01-01"))&(basic["auditing_date"]<=pd.to_datetime("2019-03-31")),"basic_spring_festival_diff"]=\
+    (pd.to_datetime("2019-02-05")-basic.loc[(basic["auditing_date"]>=pd.to_datetime("2019-01-01"))&(basic["auditing_date"]<=pd.to_datetime("2019-03-31"))]["auditing_date"]).dt.days
 # 平均每天还款金额
 basic["basic_m_days"] = (basic["due_date"] - basic["auditing_date"]).dt.days
 basic["basic_due_amt_every_day"] = basic["due_amt"] / basic["basic_m_days"]
@@ -46,7 +51,7 @@ basic = basic[
     ["user_id", "listing_id", "auditing_date", "auditing_date_last3", "auditing_date_last6", "auditing_date_last9",
      "due_date"
         , "basic_m_days", "basic_due_amt_every_day", "basic_day_of_week", "basic_day_of_month",
-     "basic_day_of_week_due"]]
+     "basic_day_of_week_due", "basic_day_of_month_due","basic_spring_festival_diff"]]
 basic_union = basic.merge(basic_info, how='left', on='user_id')
 print(basic_union.shape)
 for month in [3, 6, 9]:
@@ -67,7 +72,13 @@ basic["basic_amt_ratio_last3"] = basic["due_amt"] / basic['basic_last3_due_amt_s
 basic["basic_amt_ratio_last6"] = basic["due_amt"] / basic['basic_last6_due_amt_sum']
 basic["basic_amt_ratio_last9"] = basic["due_amt"] / basic['basic_last9_due_amt_sum']
 
-
+# 近3月订单数、订单金额、提前还款日期、首逾记录、截止日还款记录占6/9的比例
+for i in [6,9]:
+    basic["basic_last3_due_amt_count_ratio_last{}".format(i)] = basic["basic_last3_due_amt_count"]/basic["basic_last{}_due_amt_count".format(i)]
+    basic["basic_last3_due_amt_sum_ratio_last{}".format(i)] = basic["basic_last3_due_amt_sum"]/basic["basic_last{}_due_amt_sum".format(i)]
+    basic["basic_last3_y_date_diff_mean_ratio_last{}".format(i)] = basic["basic_last3_y_date_diff_mean"] / basic["basic_last{}_y_date_diff_mean".format(i)]
+    basic["basic_last3_y_is_last_date_sum_ratio_last{}".format(i)] = basic["basic_last3_y_is_last_date_sum"] / basic["basic_last{}_y_is_last_date_sum".format(i)]
+    basic["basic_last3_y_is_overdue_sum_ratio_last{}".format(i)] = basic["basic_last3_y_is_overdue_sum"] / basic["basic_last{}_y_is_overdue_sum".format(i)]
 # 账单日据1/5/6/10/15/16/20/21/25/26天数差
 # 账单日前1/5/6/10/15/16/20/21/25/26星期几
 def find_diff(date, day):
@@ -104,4 +115,4 @@ del basic["auditing_date_last9"]
 del basic["due_date"]
 del basic["listing_id_info"]
 del basic["due_amt"]
-basic.to_csv(outpath + 'feature_basic_train.csv', index=None)
+basic.to_csv(outpath + 'feature_basic_train0619.csv', index=None)

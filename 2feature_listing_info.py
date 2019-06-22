@@ -27,14 +27,14 @@ listing_info = pd.read_csv(open(path+"listing_info.csv",encoding='utf8'),parse_d
 agg = {
     "term": ["count", "max", "min","mean","std"],
     "rate":["max","min","mean","std"],
-    "principal": ["max", "min", "mean","std"],
+    "principal": ["sum","max", "min", "mean","std"],
 }
 #左连接筛选卡时间
 listing_info.columns = ["user_id","listing_id_info","auditing_date_info","term","rate","principal"]
 basic_union = basic.merge(listing_info,how='left',on='user_id')
 print(basic_union.shape)
 for month in [3,6,9,12]:
-    print(month)
+    print("近几个月的统计:",month)
 
     basic_tmp = basic_union.loc[(basic_union["auditing_date_info"]<basic_union["auditing_date"])&(
             basic_union["auditing_date_info"]>=basic_union["auditing_date_last{}".format(month)])]
@@ -49,7 +49,7 @@ for month in [3,6,9,12]:
 listing_info.columns = ['user_id','listing_id','auditing_date','listing_info_term','listing_info_rate','listing_info_principal']
 basic = basic.merge(listing_info,how='left',on=['user_id','listing_id','auditing_date'])
 
-#全部历史最近一次借款距当前最小天/最大天
+#全部历史借款距当前订单最小天/最大天
 basic_union = basic_union.loc[basic_union["auditing_date_info"]<basic_union["auditing_date"]]
 basic_union["date_diff"] = (basic_union["auditing_date"]-basic_union["auditing_date_info"]).dt.days
 date_diff_cnt = basic_union.groupby(["user_id","listing_id"],as_index=False).agg({'date_diff':["count","max",'min','mean','std']})
@@ -57,8 +57,29 @@ date_diff_cnt.columns = ['listing_info_date_diff_' + i[0] + '_' + i[1] for i in 
 date_diff_cnt = date_diff_cnt.rename(columns={"listing_info_date_diff_user_id_":"user_id","listing_info_date_diff_listing_id_":"listing_id"})
 basic = basic.merge(date_diff_cnt,how='left',on=["user_id","listing_id"])
 
+# 当前标的期数/费率/金额占3/6/9/12均值的比例
+for i in [3,6,9,12]:
+    print("当前标的占比：",i)
+    basic["listing_info_term_ratio_last{}".format(i)] = basic["listing_info_term"]/basic["listing_info_last{}_term_mean".format(i)]
+    basic["listing_info_rate_ratio_last{}".format(i)] = basic["listing_info_rate"]/basic["listing_info_last{}_rate_mean".format(i)]
+    basic["listing_info_principal_ratio_last{}".format(i)] = basic["listing_info_principal"] / basic["listing_info_last{}_principal_sum".format(i)]
+
+# 近3月标的期数/费率/金额占6/9/12均值的比例
+for i in [6,9,12]:
+    print("近3月标的占比：",i)
+    basic["listing_info_last3_term_mean_ratio_last{}".format(i)] = basic["listing_info_last3_term_mean"]/basic["listing_info_last{}_term_mean".format(i)]
+    basic["listing_info_last3_rate_mean_ratio_last{}".format(i)] = basic["listing_info_last3_rate_mean"]/basic["listing_info_last{}_rate_mean".format(i)]
+    basic["listing_info_last3_principal_sum_ratio_last{}".format(i)] = basic["listing_info_last3_principal_sum"] / basic["listing_info_last{}_principal_sum".format(i)]
+# 近6月标的期数/费率/金额占9/12均值的比例
+for i in [9,12]:
+    print("近6月标的占比：",i)
+    basic["listing_info_last6_term_mean_ratio_last{}".format(i)] = basic["listing_info_last6_term_mean"]/basic["listing_info_last{}_term_mean".format(i)]
+    basic["listing_info_last6_rate_mean_ratio_last{}".format(i)] = basic["listing_info_last6_rate_mean"]/basic["listing_info_last{}_rate_mean".format(i)]
+    basic["listing_info_last6_principal_sum_ratio_last{}".format(i)] = basic["listing_info_last6_principal_sum"] / basic["listing_info_last{}_principal_sum".format(i)]
+
 del basic["auditing_date_last3"]
 del basic["auditing_date_last6"]
 del basic["auditing_date_last9"]
 del basic["auditing_date_last12"]
-basic.to_csv(outpath+'feature_listing_info.csv',index=None)
+
+basic.to_csv(outpath+'feature_listing_info0619.csv',index=None)

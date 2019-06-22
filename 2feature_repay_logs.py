@@ -19,6 +19,8 @@ basic = pd.read_csv(open(outpath + "feature_main_key.csv", encoding='utf8'),pars
 basic["auditing_date_last1"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+1))
 basic["auditing_date_last2"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+2))
 basic["auditing_date_last3"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+3))
+basic["auditing_date_last6"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+6))
+basic["auditing_date_last12"] = basic["auditing_date"].apply(lambda x: x - relativedelta(months=+12))
 
 basic = basic.sort_values(["user_id", "listing_id"])
 user_repay_logs = pd.read_csv(open(path+"user_repay_logs.csv",encoding='utf8'),parse_dates=['due_date','repay_date'])
@@ -44,6 +46,21 @@ basic_union['date_diff'] = basic_union['date_diff'].apply(lambda x:x if x>=0 els
 #逾期次数
 def overdue_cnt(df):
     return df[df<0].count()
+#逾期占比
+def overdue_ratio(df):
+    return df[df<0].count()/df.count()
+#0占比
+def diff0_ratio(df):
+    return df[df==0].count()/df.count()
+#1占比
+def diff1_ratio(df):
+    return df[df==1].count()/df.count()
+#2占比
+def diff2_ratio(df):
+    return df[df==2].count()/df.count()
+#3占比
+def diff3_ratio(df):
+    return df[df==3].count()/df.count()
 #周一还款
 def week0_cnt(df):
     return df[df==0].count()
@@ -88,7 +105,7 @@ def day26_cnt(df):
     return df[df==26].count()
 agg = {
     'repay_amt':['max','min','sum','std','mean'],
-    'date_diff':['count','mean','min','max',overdue_cnt],
+    'date_diff':['count','mean','min','max','std',overdue_cnt,overdue_ratio,diff0_ratio,diff1_ratio,diff2_ratio,diff3_ratio],
     'day_of_week':[week0_cnt,week4_cnt,week5_cnt,week6_cnt],
     'day_of_month':[day1_cnt,day5_cnt,day6_cnt,day10_cnt,day15_cnt,day16_cnt,day20_cnt,
                     day21_cnt,day25_cnt,day26_cnt]
@@ -106,13 +123,13 @@ for i in [0,1,2,3]:
     basic = basic.merge(basic_union_order,how='left',on=["user_id","listing_id"])
 
 # 100天内最近一次账单还款时间
-basic_union["last_diff"] = (basic_union["auditing_date"]-basic_union["repay_date"]).apply(lambda x:int(x.days))
-basic_rank = basic_union.loc[(basic_union["rank"]==1)&(basic_union["last_diff"]<=100)][["user_id","listing_id",'date_diff','repay_amt']]
-basic_rank = basic_rank.rename(columns={'date_diff':"repay_logs_date_diff_last",'repay_amt':'repay_logs_repay_amt_last'})
+basic_union["last_diff"] = (basic_union["auditing_date"]-basic_union["repay_date"]).apply(lambda x:int(x.days))#还款日距当前订单时间
+basic_rank = basic_union.loc[(basic_union["rank"]==1)&(basic_union["last_diff"]<=100)][["user_id","listing_id",'last_diff','repay_amt']]
+basic_rank = basic_rank.rename(columns={'last_diff':"repay_logs_last_diff100",'repay_amt':'repay_logs_repay_amt_last100'})
 basic = basic.merge(basic_rank,how='left',on=["user_id","listing_id"])
 
-#近1/2/3个月 还款情况
-for month in [1,2,3]:
+#近1/2/3/6/12个月 还款情况
+for month in [1,2,3,6,12]:
     print(month)
 
     basic_tmp = basic_union.loc[(basic_union["repay_date"]<basic_union["auditing_date"])&(
@@ -122,8 +139,41 @@ for month in [1,2,3]:
     basic_tmp = basic_tmp.rename(columns={"repay_logs_last{}_user_id_".format(month):"user_id","repay_logs_last{}_listing_id_".format(month):"listing_id"})
     basic = basic.merge(basic_tmp,how='left',on=["user_id","listing_id"])
 
+# 历史还款记录距今时间最大/最小值/均值
+basic_union["auditing_date_diff"] = (basic_union["auditing_date"]-basic_union["repay_date"]).dt.days
+date_diff_cnt = basic_union.groupby(["user_id","listing_id"],as_index=False).agg({'auditing_date_diff':["max",'min','mean','std']})
+date_diff_cnt.columns = ['repay_logs_auditing_date_diff_' + i[0] + '_' + i[1] for i in date_diff_cnt.columns]
+date_diff_cnt = date_diff_cnt.rename(columns={"repay_logs_auditing_date_diff_user_id_":"user_id","repay_logs_auditing_date_diff_listing_id_":"listing_id"})
+basic = basic.merge(date_diff_cnt,how='left',on=["user_id","listing_id"])
+
+# 1/2/3期账单与历史的比例
+basic["repay_logs_order1_repay_amt_sum_ratio"] = basic["repay_logs_order1_repay_amt_sum"]/basic["repay_logs_order0_repay_amt_sum"]
+basic["repay_logs_order2_repay_amt_sum_ratio"] = basic["repay_logs_order2_repay_amt_sum"]/basic["repay_logs_order0_repay_amt_sum"]
+basic["repay_logs_order3_repay_amt_sum_ratio"] = basic["repay_logs_order3_repay_amt_sum"]/basic["repay_logs_order0_repay_amt_sum"]
+basic["repay_logs_order1_date_diff_mean_ratio"] = basic["repay_logs_order1_date_diff_mean"]/basic["repay_logs_order0_date_diff_mean"]
+basic["repay_logs_order2_date_diff_mean_ratio"] = basic["repay_logs_order2_date_diff_mean"]/basic["repay_logs_order0_date_diff_mean"]
+basic["repay_logs_order3_date_diff_mean_ratio"] = basic["repay_logs_order3_date_diff_mean"]/basic["repay_logs_order0_date_diff_mean"]
+# 近1/2/3/6月账单与历史的比例
+for i in [1,2,3,6]:
+    basic["repay_logs_last{}_repay_amt_sum_his_ratio".format(i)] = basic["repay_logs_last{}_repay_amt_sum".format(i)]/basic["repay_logs_order0_repay_amt_sum"]
+    basic["repay_logs_last{}_date_diff_mean_his_ratio".format(i)] = basic["repay_logs_last{}_date_diff_mean".format(i)] / basic["repay_logs_order0_date_diff_mean"]
+# 近1月账单与2/3/6/12的比例
+for i in [2,3,6,12]:
+    basic["repay_logs_last1_repay_amt_sum_last{}_ratio".format(i)] = basic["repay_logs_last1_repay_amt_sum"]/basic["repay_logs_last{}_repay_amt_sum".format(i)]
+    basic["repay_logs_last1_date_diff_mean_last{}_ratio".format(i)] = basic["repay_logs_last1_date_diff_mean"]/basic["repay_logs_last{}_date_diff_mean".format(i)]
+# 近2月账单与3/6/12的比例
+for i in [3,6,12]:
+    basic["repay_logs_last2_repay_amt_sum_last{}_ratio".format(i)] = basic["repay_logs_last2_repay_amt_sum"]/basic["repay_logs_last{}_repay_amt_sum".format(i)]
+    basic["repay_logs_last2_date_diff_mean_last{}_ratio".format(i)] = basic["repay_logs_last2_date_diff_mean"]/basic["repay_logs_last{}_date_diff_mean".format(i)]
+# 近3月账单与6/12的比例
+for i in [6,12]:
+    basic["repay_logs_last3_repay_amt_sum_last{}_ratio".format(i)] = basic["repay_logs_last3_repay_amt_sum"]/basic["repay_logs_last{}_repay_amt_sum".format(i)]
+    basic["repay_logs_last3_date_diff_mean_last{}_ratio".format(i)] = basic["repay_logs_last3_date_diff_mean"]/basic["repay_logs_last{}_date_diff_mean".format(i)]
+
 del basic["auditing_date_last1"]
 del basic["auditing_date_last2"]
 del basic["auditing_date_last3"]
+del basic["auditing_date_last6"]
+del basic["auditing_date_last12"]
 
-basic.to_csv(outpath+'feature_repay_logs.csv',index=None)
+basic.to_csv(outpath+'feature_repay_logs0619.csv',index=None)
