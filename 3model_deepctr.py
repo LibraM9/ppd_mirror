@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
 # @Author: limeng
-# @File  : 3model_is_overdue.py
-# @time  : 2019/6/12
+# @File  : 3model_deepctr.py
+# @time  : 2019/6/25
 """
-文件说明：二分类问题，判断是否首逾
+文件说明：deepctr
 """
 import pandas as pd
 import numpy as np
-from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score,roc_auc_score
 
 date = "0619"
-# oripath = "F:/数据集/1906拍拍/"
-# inpath = "F:/数据集处理/1906拍拍/"
-# outpath = "F:/项目相关/1906拍拍/out/"
 oripath = "/home/dev/lm/paipai/ori_data/"
 inpath = "/home/dev/lm/paipai/feature/"
 outpath = "/home/dev/lm/paipai/out/"
@@ -43,7 +40,7 @@ print(df.shape)
 df["y_date_diff"] = df["y_date_diff"].replace(-1,32) #0~31
 df["y_date_diff_bin"] = df["y_date_diff_bin"].replace(-1,9)
 df["y_date_diff_bin3"] = df["y_date_diff_bin3"].replace(-1,2)
-df = df.replace([np.inf, -np.inf], np.nan)
+df = df.replace([np.inf, -np.inf], np.nan) #正无穷负无穷均按照缺失处理
 
 train = df[df["auditing_date"]<='2018-12-31']
 train['repay_amt'] = train['repay_amt'].apply(lambda x: x if x != '\\N' else 0).astype('float32')
@@ -69,81 +66,63 @@ for col in df.columns:
 # catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province",
 #                    "user_info_tag_is_province_equal"]
 catgory_feature = ["auditing_month","user_info_tag_gender", "user_info_tag_is_province_equal"]
+catgory_feature = [features.index(i) for i in catgory_feature]
+# y = "y_date_diff"
 y = "y_is_overdue"
-
-del df_basic
-del df_train
-del df_behavior_logs
-del df_listing_info
-del df_repay_logs
-del df_user_info_tag
-del df_other
-
-#开始训练  auc 0.7642
-from sklearn.model_selection import StratifiedKFold, KFold
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import log_loss,roc_auc_score
-import lightgbm as lgb
+n = 33 #分类数量，和y有关
+#######################################
+import sys
+sys.path.append("/home/dev/lm/utils_lm")
 import numpy as np
 
-param ={'num_leaves': 2**5,
-         'min_data_in_leaf': 32,
-         'objective':'binary',
-         'max_depth': 5,
-         'learning_rate': 0.03,
-         "min_child_samples": 20,
-         "boosting": "gbdt",
-         "feature_fraction": 0.8,
-         "bagging_freq": 1,
-         "bagging_fraction": 0.8,
-         "bagging_seed": 11,
-         "metric": 'auc',
-         "lambda_l1": 0.5,
-          "verbosity": -1,
-        'is_unbalance': True
-        }
-folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=2333)
-# folds = KFold(n_splits=5, shuffle=True, random_state=2333)
-oof = np.zeros(len(train))
-predictions = np.zeros(len(test))
-feature_importance_df = pd.DataFrame()
+from model_train.a1_preprocessing import NaFilterFeature #删除缺失过多的列
+nf = NaFilterFeature(num=0.5)
+X_train = nf.fit_transform(train[features])
+X_test = nf.transform(test[features])
 
-for fold_, (trn_idx, val_idx) in enumerate(folds.split(train[features], train[y].values)):
-    print("fold {}".format(fold_))
-    trn_data = lgb.Dataset(train.iloc[trn_idx][features],
-                           label=train[y].iloc[trn_idx],
-                           categorical_feature=catgory_feature)
-    val_data = lgb.Dataset(train.iloc[val_idx][features],
-                           label=train[y].iloc[val_idx],
-                           categorical_feature=catgory_feature)
+for i in X_train.columns:
+    X_train[i] = X_train[i].fillna(X_train[i].median())
+    X_test[i] = X_test[i].fillna(X_test[i].median())
 
-    num_round = 5000
-    clf = lgb.train(param, trn_data, num_round, valid_sets=[trn_data, val_data], verbose_eval=50,
-                    early_stopping_rounds=100,categorical_feature=catgory_feature)
+sparse_features  = [i for i in X_train.columns if (i[:6]=="other_" and len(i.split("_"))==2)]
+sparse_features.extend(["auditing_month","basic_m_days","basic_day_of_week","basic_day_of_month"
+                           ,"basic_day_of_week_due","basic_day_of_month_due","user_info_tag_is_c23141"
+                           , "user_info_tag_is_c31255","user_info_tag_is_c20092","user_info_tag_is_c02321"
+                           , "user_info_tag_is_N"])
+dense_features = [i for i in X_train.columns if i not in sparse_features]
+target = [y]
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.model_selection import train_test_split
+from deepctr.models import DeepFM,DCN
+from deepctr.utils import SingleFeat
 
-    oof[val_idx] = clf.predict(train.iloc[val_idx][features], num_iteration=clf.best_iteration)
+#对稠密特征归一化
+mms = MinMaxScaler(feature_range=(0, 1))
+X_train[dense_features] = mms.fit_transform(X_train[dense_features])
+X_test[dense_features] = mms.transform(X_test[dense_features])
 
-    fold_importance_df = pd.DataFrame()
-    fold_importance_df["feature"] = features
-    fold_importance_df["importance"] = clf.feature_importance()
-    fold_importance_df["fold"] = fold_ + 1
-    feature_importance_df = pd.concat([feature_importance_df, fold_importance_df], axis=0)
+#对稀疏特征编码
+for feat in sparse_features:
+    lbe = LabelEncoder()
+    X_train[feat] = lbe.fit_transform(X_train[feat])
+    X_test[feat] = lbe.transform(X_test[feat])
 
-    predictions += clf.predict(test[features], num_iteration=clf.best_iteration) / folds.n_splits
+sparse_feature_list = [SingleFeat(feat, X_train[feat].nunique())  # since the input is string
+                           for feat in sparse_features]
+dense_feature_list = [SingleFeat(feat, 0, )
+                            for feat in dense_features]
 
-print("CV score: {:<8.5f}".format(log_loss(train[y].values, oof)))
-print("auc score:",roc_auc_score(train[y].values, oof))
-feature_importance = feature_importance_df[["feature", "importance"]].groupby("feature").mean().sort_values(by="importance",
-ascending=False)
+train_model_input = [X_train[feat.name].values for feat in sparse_feature_list] + \
+                    [X_train[feat.name].values for feat in dense_feature_list]
+test_model_input = [X_test[feat.name].values for feat in sparse_feature_list] + \
+                   [X_test[feat.name].values for feat in dense_feature_list]
 
-feature_importance.to_csv(outpath+"importance_is_overdue.csv")
-#测试集逾期概率
-test_dic = {
-    "user_id": test["user_id"].values,
-    "listing_id":test["listing_id"].values,
-    "auditing_date":test["auditing_date"].values,
-    "due_amt":test["due_amt"].values,
-}
-test_prob = pd.DataFrame(test_dic)
-test_prob["overdue"] = predictions
-test_prob.to_csv(outpath+"is_overdue0613.csv",index=None)
+model = DeepFM({"sparse": sparse_feature_list,"dense": dense_feature_list}, task='binary')
+model.compile("adam", "binary_crossentropy", metrics=['binary_crossentropy'], )
+history = model.fit(train_model_input, train[target].values,batch_size=256, epochs=10, verbose=2, validation_split=0.2, )
+pred_ans = model.predict(train_model_input, batch_size=256)
+print("train score", roc_auc_score(train[target].values, pred_ans)) #0.757
+pred_ans = model.predict(test_model_input, batch_size=256)
+
+ans = pd.DataFrame({"listing_id":test["listing_id"].values,"is_overdue":[i[0] for i in pred_ans]})
+ans.to_csv(outpath+"is_overdue_dfm.csv",index=False)

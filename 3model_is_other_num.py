@@ -167,5 +167,5 @@ for i in range(32):
     auc.append(roc_auc_score(train[y].values, oof))
 
 model_loss = pd.DataFrame({"model":model_n,"loss":loss,"auc":auc})
-model_loss.to_csv(outpath+"auc_model1_31_{}.csv".format(date))
+model_loss.to_csv(outpath+"auc_model1_31_{}.csv".format(date),index=False)
 

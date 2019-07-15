@@ -8,6 +8,7 @@ train 2018.1.1~2018.12.31
 test 2019.2.1~2019.3.31
 """
 import pandas as pd
+import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
 
 date = "0619"
@@ -15,42 +16,68 @@ date = "0619"
 # inpath = "F:/数据集处理/1906拍拍/"
 # outpath = "F:/项目相关/1906拍拍/out/"
 oripath = "/home/dev/lm/paipai/ori_data/"
-inpath = "/home/dev/lm/paipai/feature/"
+# inpath = "/home/dev/lm/paipai/feature/"
+inpath = "/home/dev/lm/paipai/feature_ning/"
 outpath = "/home/dev/lm/paipai/out/"
+# 100特征
+# df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
+# print("feature_basic",df_basic.shape)
+# df_train = pd.read_csv(open(inpath + "feature_basic_train{}.csv".format(date), encoding='utf8'))
+# print("feature_basic_train",df_train.shape)
+# df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs_plus{}.csv".format(date), encoding='utf8'))
+# print("feature_behavior_logs",df_behavior_logs.shape)
+# df_listing_info = pd.read_csv(open(inpath + "feature_listing_info{}.csv".format(date), encoding='utf8'))
+# print("feature_listing_info",df_listing_info.shape)
+# # df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs{}.csv".format(date), encoding='utf8'))
+# # print("feature_repay_logs",df_repay_logs.shape)
+# df_repay_logs2 = pd.read_csv(open(inpath + "feature_repay_logs_plus0702.csv", encoding='utf8'))
+# print("feature_repay_logs2",df_repay_logs2.shape)
+# df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag{}.csv".format(date), encoding='utf8'))
+# print("feature_user_info_tag",df_user_info_tag.shape)
+# df_other = pd.read_csv(open(inpath + "feature_other{}.csv".format(date), encoding='utf8'))
+# print("feature_other",df_other.shape)
 
-df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
+#300W特征
+df_basic = pd.read_csv(open(inpath + "feature_basic300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_basic",df_basic.shape)
-df_train = pd.read_csv(open(inpath + "feature_basic_train{}.csv".format(date), encoding='utf8'))
+df_train = pd.read_csv(open(inpath + "feature_basic_train300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_basic_train",df_train.shape)
-df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs{}.csv".format(date), encoding='utf8'))
+df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_behavior_logs",df_behavior_logs.shape)
-df_listing_info = pd.read_csv(open(inpath + "feature_listing_info{}.csv".format(date), encoding='utf8'))
-print("feature_listing_info",df_listing_info.shape)
-df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs{}.csv".format(date), encoding='utf8'))
+# df_listing_info = pd.read_csv(open(inpath + "feature_listing_info300.csv", encoding='utf8'),parse_dates=['auditing_date'])
+# print("feature_listing_info",df_listing_info.shape)
+df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs300.csv", encoding='utf8'),parse_dates=['auditing_date'])
+# df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs300_order1.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_repay_logs",df_repay_logs.shape)
-df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag{}.csv".format(date), encoding='utf8'))
+df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_user_info_tag",df_user_info_tag.shape)
-df_other = pd.read_csv(open(inpath + "feature_other{}.csv".format(date), encoding='utf8'))
+df_other = pd.read_csv(open(inpath + "feature_other300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_other",df_other.shape)
+
 #合并所有特征
 df = df_basic.merge(df_train,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_behavior_logs,how='left',on=['user_id','listing_id','auditing_date'])
-df = df.merge(df_listing_info,how='left',on=['user_id','listing_id','auditing_date'])
+# df = df.merge(df_listing_info,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_repay_logs,how='left',on=['user_id','listing_id','auditing_date'])
+# df = df.merge(df_repay_logs2,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_user_info_tag,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_other,how='left',on=['user_id','listing_id','auditing_date'])
 print(df.shape)
 #调整多分类y
 df["y_date_diff"] = df["y_date_diff"].replace(-1,32) #0~31
-df["y_date_diff_bin"] = df["y_date_diff_bin"].replace(-1,9)
-df["y_date_diff_bin3"] = df["y_date_diff_bin3"].replace(-1,2)
+# df["y_date_diff_bin"] = df["y_date_diff_bin"].replace(-1,9)
+# df["y_date_diff_bin3"] = df["y_date_diff_bin3"].replace(-1,2)
+df = df.replace([np.inf, -np.inf], np.nan)
 
-train = df[df["auditing_date"]<='2018-12-31']
+# train = df[df["auditing_date"]<='2018-12-31']
+train = df[df["is_train"]==1]
+train = train[train["auditing_date"]<"2019-01-01"]
 train['repay_amt'] = train['repay_amt'].apply(lambda x: x if x != '\\N' else 0).astype('float32')
 train["y_date_diff"]=train["y_date_diff"].astype(int)
-train["y_date_diff_bin"]=train["y_date_diff_bin"].astype(int)
-train["y_date_diff_bin3"]=train["y_date_diff_bin3"].astype(int)
-test = df[df["auditing_date"]>='2019-01-01']
+# train["y_date_diff_bin"]=train["y_date_diff_bin"].astype(int)
+# train["y_date_diff_bin3"]=train["y_date_diff_bin3"].astype(int)
+# test = df[df["auditing_date"]>='2019-01-01']
+test = df[df["is_train"]==0]
 print(train.shape)
 print(test.shape)
 # 字符变量处理
@@ -59,19 +86,26 @@ print(test.shape)
 del_feature = ["user_id","listing_id","auditing_date","due_date","repay_date","repay_amt"
                 ,"user_info_tag_id_city","user_info_tag_taglist","dead_line",
                "other_tag_pred_is_overdue", "other_tag_pred_is_last_date",
-               "user_info_tag_id_province", "user_info_tag_cell_province"]
+               "user_info_tag_id_province", "user_info_tag_cell_province","is_train"]
 y_list = [i  for i in df.columns if i[:2]=='y_']
 del_feature.extend(y_list)
+#删除重要度最高的变量(尝试)
+del_feature = del_feature+["auditing_month","due_amt"]
 features = []
 for col in df.columns:
     if col not in del_feature:
         features.append(col)
+#读取筛选后的特征
+# features = pd.read_csv(open(inpath + "feature.csv", encoding='utf8'))
+# features = features["feature"].values.tolist()
 # catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province",
 #                    "user_info_tag_is_province_equal"]
 catgory_feature = ["auditing_month","user_info_tag_gender", "user_info_tag_is_province_equal"]
-catgory_feature = [features.index(i) for i in catgory_feature]
+catgory_feature = [features.index(i) for i in catgory_feature if i in features]
 y = "y_date_diff"
 n = 33 #分类数量，和y有关
+# train = train.loc[train[y]!=32] #删除逾期数据
+
 #开始训练 lgb  ######################################
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
@@ -81,18 +115,19 @@ import numpy as np
 
 param = {'objective': 'multiclass',
          'num_class':n,
-         'num_leaves': 2**4, #34
-         'min_data_in_leaf': 32,#25
-         'max_depth': 5,  # 5 2.02949 42.02981
-         'learning_rate': 0.02, # 0.04 2.05467 7318
+         'num_leaves': 2**5, #2**5
+         'min_data_in_leaf': 25,#25
+         'max_depth': 5,  # 5 2.02949 4 2.02981
+         'learning_rate': 0.08, # 最优0.02 0.04 2.05467 7318
          'lambda_l1': 0.13,
          "boosting": "gbdt",
          "feature_fraction": 0.85,
          'bagging_freq': 8,
-         "bagging_fraction": 0.8, #0.9
+         "bagging_fraction": 0.9, #0.9
          "metric": 'multi_logloss',
          "verbosity": -1,
-         "random_state": 2333}
+         "random_state": 2333,
+         "num_threads" : 50}
 
 folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=2333)
 # folds = KFold(n_splits=5, shuffle=True, random_state=2333)
@@ -157,7 +192,7 @@ print("CV score: {:<8.5f}".format(log_loss(train[y], oof)))
 feature_importance = feature_importance_df[["Feature", "importance"]].groupby("Feature").mean().sort_values(by="importance",
 ascending=False)
 
-feature_importance.to_csv(outpath+"importance_33_lgb_{}_tag.csv".format(date))
+
 
 # #开始训练 xgb  ######################################
 # from sklearn.model_selection import StratifiedKFold, KFold
@@ -231,21 +266,22 @@ feature_importance.to_csv(outpath+"importance_33_lgb_{}_tag.csv".format(date))
 #
 # feature_importance.to_csv(outpath+"importance_33_xgb_{}.csv".format(date))
 
-#train
-train_prob = pd.DataFrame(oof)
-train_dic = {
-    "user_id": train["user_id"].values,
-    "listing_id":train["listing_id"].values,
-    "auditing_date":train["auditing_date"].values,
-    "due_date":train["due_date"].values,
-    "due_amt":train["due_amt"].values,
-}
-for key in train_dic:
-    train_prob[key] = train_dic[key]
-for i in range(n-1):
-    train_prob[i] = train_prob[i]*train_prob["due_amt"]
+# #train
+# train_prob = pd.DataFrame(oof)
+# train_dic = {
+#     "user_id": train["user_id"].values,
+#     "listing_id":train["listing_id"].values,
+#     "auditing_date":train["auditing_date"].values,
+#     "due_date":train["due_date"].values,
+#     "due_amt":train["due_amt"].values,
+# }
+# for key in train_dic:
+#     train_prob[key] = train_dic[key]
+# # train_prob.to_csv(outpath + 'out_lgb_train.csv', index=None)
+# # for i in range(n-1):
+# #     train_prob[i] = train_prob[i]*train_prob["due_amt"]
 #test
-test_prob = pd.DataFrame(predictions)
+test_prob = pd.DataFrame(predictions.copy())
 test_dic = {
     "user_id": test["user_id"].values,
     "listing_id":test["listing_id"].values,
@@ -255,6 +291,8 @@ test_dic = {
 }
 for key in test_dic:
     test_prob[key] = test_dic[key]
+#输出预测概率
+# test_prob.to_csv(outpath+'out_lgb_test.csv',index=None)
 for i in range(n-1):
     test_prob[i] = test_prob[i]*test_prob["due_amt"]
 #对于训练集评价
@@ -276,5 +314,46 @@ def df_rank(df_prob, df_sub):
 submission = pd.read_csv(open(oripath+"submission.csv",encoding='utf8'),parse_dates=["repay_date"])
 submission['rank'] = submission.groupby('listing_id')['repay_date'].rank(ascending=False,method='first')
 sub = df_rank(test_prob, submission)
-sub.to_csv(outpath+'sub_lgb_33_0619_noprovince_mx4.csv',index=None)
-# sub.to_csv(outpath+'sub_xgb_33_0613.csv',index=None)
+name = 'sub_lgb_300_623_nolist_0707.csv'
+sub.to_csv(outpath + name,index=None)
+feature_importance.to_csv(outpath+"importance_"+name)
+# sub.to_csv(outpath+'sub_lgb_33_0619.csv',index=None)
+
+##########宁输出
+# test_pred_prob = predictions.copy()
+# test_df = pd.read_csv(oripath + 'test.csv', parse_dates=['auditing_date', 'due_date'])
+# sub = test_df[['listing_id', 'auditing_date', 'due_amt', 'due_date']]
+# sub['due_days'] = (sub['due_date'] - sub['auditing_date']).dt.days
+# prob_cols = ['prob_{}'.format(i) for i in range(33)]
+# for i, f in enumerate(prob_cols):
+#     sub[f] = test_pred_prob[:, i]
+#
+# cols_28 = ['prob_{}'.format(i) for i in range(29)]
+# cols_30 = ['prob_{}'.format(i) for i in range(31)]
+#
+# su_28 = sub.loc[sub['due_days'] == 28]
+# for i, f in enumerate(cols_28):
+#     #     su_28[f] = su_28[f]+(i)*(su_28['prob_31']+su_28['prob_30']+su_28['prob_29'])/sum(list(range(29)))
+#     #     su_28[f] = su_28[f]*(1+(su_28['prob_31']+su_28['prob_30']+su_28['prob_29']))
+#     su_28[f] = su_28[f] + (su_28['prob_31'] + su_28['prob_30'] + su_28['prob_29']) * su_28[f] / su_28[cols_28].sum(
+#         axis=1)
+#
+# su_30 = sub.loc[sub['due_days'] == 30]
+# for i, f in enumerate(cols_30):
+#     #     su_30[f] = su_30[f]+(i)*(su_30['prob_31'])/sum(list(range(31)))
+#     #      su_30[f] = su_30[f]*(1+su_30['prob_31'])
+#     su_30[f] = su_30[f] + su_30['prob_31'] * su_30[f] / su_30[cols_30].sum(axis=1)
+#
+# sub = sub[~sub['listing_id'].isin(su_28['listing_id'].unique())]
+# sub = sub[~sub['listing_id'].isin(su_30['listing_id'].unique())]
+# sub = pd.concat((sub, su_28, su_30))
+# sub_example = pd.read_csv(oripath + 'submission.csv', parse_dates=['repay_date'])
+# sub_example = sub_example.merge(sub, on='listing_id', how='left')
+# sub_example['due_date'] = pd.to_datetime(sub_example['due_date'])
+# sub_example['days'] = (sub_example['due_date'] - sub_example['repay_date']).dt.days
+# # shape = (-1, 33)
+# test_prob = sub_example[prob_cols].values
+# test_labels = sub_example['days'].values
+# test_prob = [test_prob[i][test_labels[i]] for i in range(test_prob.shape[0])]
+# sub_example['repay_amt'] = sub_example['due_amt'] * test_prob
+# sub_example[['listing_id', 'repay_date', 'repay_amt']].to_csv(outpath+'sub_lgb_300_357_19modify.csv', index=False)

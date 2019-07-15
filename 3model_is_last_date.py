@@ -6,16 +6,16 @@
 文件说明：二分类问题，判断是否最后一天还款
 """
 import pandas as pd
+import numpy as np
 from sklearn.metrics import mean_squared_error, mean_absolute_error, log_loss, accuracy_score
-import gc
 
-date = "0618"
+date = "0619"
 # oripath = "F:/数据集/1906拍拍/"
 # inpath = "F:/数据集处理/1906拍拍/"
 # outpath = "F:/项目相关/1906拍拍/out/"
-oripath = "/home/dev/lm/paipai/ori_data/"
-inpath = "/home/dev/lm/paipai/feature/"
-outpath = "/home/dev/lm/paipai/out/"
+oripath = "/root/lm/paipai/ori_data/"
+inpath = "/root/lm/paipai/feature/"
+outpath = "/root/lm/paipai/out/"
 
 df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
 print("feature_basic",df_basic.shape)
@@ -43,6 +43,7 @@ print(df.shape)
 df["y_date_diff"] = df["y_date_diff"].replace(-1,32) #0~31
 df["y_date_diff_bin"] = df["y_date_diff_bin"].replace(-1,9)
 df["y_date_diff_bin3"] = df["y_date_diff_bin3"].replace(-1,2)
+df = df.replace([np.inf, -np.inf], np.nan)
 
 train = df[df["auditing_date"]<='2018-12-31']
 train['repay_amt'] = train['repay_amt'].apply(lambda x: x if x != '\\N' else 0).astype('float32')
@@ -54,18 +55,20 @@ print(train.shape)
 print(test.shape)
 # 字符变量处理
 
-#无法入模的特征和y
+#无法入模的特征和y pred特征
 del_feature = ["user_id","listing_id","auditing_date","due_date","repay_date","repay_amt"
                 ,"user_info_tag_id_city","user_info_tag_taglist","dead_line",
-               "other_tag_pred_is_overdue", "other_tag_pred_is_last_date"]
+               "other_tag_pred_is_overdue", "other_tag_pred_is_last_date",
+               "user_info_tag_id_province", "user_info_tag_cell_province"]
 y_list = [i  for i in df.columns if i[:2]=='y_']
 del_feature.extend(y_list)
 features = []
 for col in df.columns:
     if col not in del_feature:
         features.append(col)
-catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province",
-                   "user_info_tag_is_province_equal"]
+# catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province",
+#                    "user_info_tag_is_province_equal"]
+catgory_feature = ["auditing_month","user_info_tag_gender", "user_info_tag_is_province_equal"]
 y = "y_is_last_date"
 
 del df_basic
@@ -75,29 +78,14 @@ del df_listing_info
 del df_repay_logs
 del df_user_info_tag
 del df_other
-gc.collect()
-#开始训练 0.74346
+
+#开始训练 0.7488
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import log_loss, roc_auc_score
 import lightgbm as lgb
 import numpy as np
 
-# param = {'num_leaves': 34,
-#          'min_data_in_leaf': 30,
-#          'objective': 'binary',
-#          'max_depth': 5,
-#          'learning_rate': 0.01,
-#          "boosting": "gbdt",
-#          "feature_fraction": 0.9,
-#          "bagging_freq": 1,
-#          "bagging_fraction": 0.9,
-#          "bagging_seed": 11,
-#          "metric": 'binary_logloss',
-#          "lambda_l1": 0.1,
-#          "verbosity": -1,
-#          "random_state": 2333,
-#         'is_unbalance': True}
 param ={'num_leaves': 2**5,
          'min_data_in_leaf': 32,
          'objective':'binary',
@@ -112,7 +100,8 @@ param ={'num_leaves': 2**5,
          "metric": 'auc',
          "lambda_l1": 0.5,
           "verbosity": -1,
-        'is_unbalance': True
+        # 'is_unbalance': True,
+        'random_state':2333,
         }
 folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=2333)
 # folds = KFold(n_splits=5, shuffle=True, random_state=2333)
@@ -148,7 +137,7 @@ print("auc score:",roc_auc_score(train[y].values, oof))
 feature_importance = feature_importance_df[["feature", "importance"]].groupby("feature").mean().sort_values(by="importance",
 ascending=False)
 
-feature_importance.to_csv(outpath+"importance_is_last_late.csv")
+feature_importance.to_csv(outpath+"importance_is_last_late{}.csv".format(date))
 #测试集最后一天还款概率
 test_dic = {
     "user_id": test["user_id"].values,
@@ -158,5 +147,5 @@ test_dic = {
 }
 test_prob = pd.DataFrame(test_dic)
 test_prob["last_date"] = predictions
-test_prob.to_csv(outpath+"is_last_date0613.csv",index=None)
+test_prob.to_csv(outpath+"is_last_date{}.csv".format(date),index=None)
 

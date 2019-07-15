@@ -11,13 +11,14 @@ import seaborn as sns
 import numpy as np
 
 path = "F:/数据集/1906拍拍/"
+# path = "/home/dev/lm/paipai/ori_data/"
 train = pd.read_csv(open(path+"train.csv",encoding='utf8')) #100W
 test = pd.read_csv(open(path+"test.csv",encoding='utf8')) #13W
 submission = pd.read_csv(open(path+"submission.csv",encoding='utf8')) #398W
 listing_info = pd.read_csv(open(path+"listing_info.csv",encoding='utf8'))
 user_info = pd.read_csv(open(path+"user_info.csv",encoding='utf8'))
 user_taglist = pd.read_csv(open(path+"user_taglist.csv",encoding='utf8'))
-# user_behavior_logs = pd.read_csv(open(path+"user_behavior_logs.csv",encoding='utf8')) #1G
+user_behavior_logs = pd.read_csv(open(path+"user_behavior_logs.csv",encoding='utf8')) #1G
 #121080/130000在test中
 #2016-08-12~2019-03-30
 user_repay_logs = pd.read_csv(open(path+"user_repay_logs.csv",encoding='utf8')) #900M
@@ -51,11 +52,13 @@ data_cnt.plot(kind='bar')
 repay_cnt = train.groupby(["user_id","listing_id"],as_index=False)["due_amt"].count()
 repay_cnt = repay_cnt["due_amt"].value_counts() / train.shape[0]
 repay_cnt.plot(kind='bar')
+plt.show()
 
 #还款的人是否全额还款 /全部全额还款
 train_amt = train[train["repay_amt"]!='\\N']
 train_amt["equal"] = (train_amt["due_amt"].apply(lambda x:round(x,4)).astype(float)==train_amt["repay_amt"].astype(float))
-print(train_amt[train_amt.equal==False])
+train_amt["equal"].value_counts().plot.bar()
+plt.show()
 
 # train 2018-01-01~2018-12-31
 date_train = train.auditing_date.unique()
@@ -172,3 +175,18 @@ dic = {0:0.408187,
 29:0.005645,
 30:0.009865,
 31:0.008368}
+
+#train/test中大额还款
+train["repay_date"] = train["repay_date"].replace("\\N","2020-01-01")
+train["due_date"] = pd.to_datetime(train["due_date"])
+train["repay_date"] = pd.to_datetime(train["repay_date"])
+train = train.sort_values("due_amt",ascending=False)
+test = test.sort_values("due_amt",ascending=False)
+train["diff"]=(train["due_date"]-train["repay_date"]).dt.days.apply(lambda x:-1 if x<0 else x)
+train5000 = train[train["due_amt"]>=5000]
+train5000 = train5000.merge(listing_info,how='left',on=["user_id","listing_id","auditing_date"])
+x = train5000["diff"].value_counts()/train5000["diff"].shape[0]
+test5000 = test[test["due_amt"]>=5000]
+test5000 = test5000.merge(listing_info,how='left',on=["user_id","listing_id","auditing_date"])
+ans = user_repay_logs[user_repay_logs.user_id.isin(test5000.user_id.values)]
+ans = ans.sort_values(["user_id","listing_id","repay_date"])

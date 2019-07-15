@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 # @Author: limeng
-# @File  : 3model_is_overdue.py
+# @File  : 3model_is_last_date.py
 # @time  : 2019/6/12
 """
-文件说明：二分类问题，判断是否首逾
+文件说明：二分类问题，判断是否最后一天还款
 """
 import pandas as pd
 import numpy as np
@@ -14,43 +14,51 @@ date = "0619"
 # inpath = "F:/数据集处理/1906拍拍/"
 # outpath = "F:/项目相关/1906拍拍/out/"
 oripath = "/home/dev/lm/paipai/ori_data/"
-inpath = "/home/dev/lm/paipai/feature/"
+# inpath = "/home/dev/lm/paipai/feature/"
+inpath = "/home/dev/lm/paipai/feature_ning/"
 outpath = "/home/dev/lm/paipai/out/"
 
-df_basic = pd.read_csv(open(inpath + "feature_basic.csv", encoding='utf8'))
+#300W特征
+df_basic = pd.read_csv(open(inpath + "feature_basic300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_basic",df_basic.shape)
-df_train = pd.read_csv(open(inpath + "feature_basic_train{}.csv".format(date), encoding='utf8'))
+df_train = pd.read_csv(open(inpath + "feature_basic_train300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_basic_train",df_train.shape)
-df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs{}.csv".format(date), encoding='utf8'))
+df_behavior_logs = pd.read_csv(open(inpath + "feature_behavior_logs300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_behavior_logs",df_behavior_logs.shape)
-df_listing_info = pd.read_csv(open(inpath + "feature_listing_info{}.csv".format(date), encoding='utf8'))
+df_listing_info = pd.read_csv(open(inpath + "feature_listing_info300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_listing_info",df_listing_info.shape)
-df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs{}.csv".format(date), encoding='utf8'))
+df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs300.csv", encoding='utf8'),parse_dates=['auditing_date'])
+# df_repay_logs = pd.read_csv(open(inpath + "feature_repay_logs300_order1.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_repay_logs",df_repay_logs.shape)
-df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag{}.csv".format(date), encoding='utf8'))
+df_user_info_tag = pd.read_csv(open(inpath + "feature_user_info_tag300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_user_info_tag",df_user_info_tag.shape)
-df_other = pd.read_csv(open(inpath + "feature_other{}.csv".format(date), encoding='utf8'))
+df_other = pd.read_csv(open(inpath + "feature_other300.csv", encoding='utf8'),parse_dates=['auditing_date'])
 print("feature_other",df_other.shape)
+
 #合并所有特征
 df = df_basic.merge(df_train,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_behavior_logs,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_listing_info,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_repay_logs,how='left',on=['user_id','listing_id','auditing_date'])
+# df = df.merge(df_repay_logs2,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_user_info_tag,how='left',on=['user_id','listing_id','auditing_date'])
 df = df.merge(df_other,how='left',on=['user_id','listing_id','auditing_date'])
 print(df.shape)
 #调整多分类y
 df["y_date_diff"] = df["y_date_diff"].replace(-1,32) #0~31
-df["y_date_diff_bin"] = df["y_date_diff_bin"].replace(-1,9)
-df["y_date_diff_bin3"] = df["y_date_diff_bin3"].replace(-1,2)
+# df["y_date_diff_bin"] = df["y_date_diff_bin"].replace(-1,9)
+# df["y_date_diff_bin3"] = df["y_date_diff_bin3"].replace(-1,2)
 df = df.replace([np.inf, -np.inf], np.nan)
 
-train = df[df["auditing_date"]<='2018-12-31']
+# train = df[df["auditing_date"]<='2018-12-31']
+train = df[df["is_train"]==1]
+train = train[train["auditing_date"]<"2019-01-01"]
 train['repay_amt'] = train['repay_amt'].apply(lambda x: x if x != '\\N' else 0).astype('float32')
 train["y_date_diff"]=train["y_date_diff"].astype(int)
-train["y_date_diff_bin"]=train["y_date_diff_bin"].astype(int)
-train["y_date_diff_bin3"]=train["y_date_diff_bin3"].astype(int)
-test = df[df["auditing_date"]>='2019-01-01']
+# train["y_date_diff_bin"]=train["y_date_diff_bin"].astype(int)
+# train["y_date_diff_bin3"]=train["y_date_diff_bin3"].astype(int)
+# test = df[df["auditing_date"]>='2019-01-01']
+test = df[df["is_train"]==0]
 print(train.shape)
 print(test.shape)
 # 字符变量处理
@@ -59,17 +67,24 @@ print(test.shape)
 del_feature = ["user_id","listing_id","auditing_date","due_date","repay_date","repay_amt"
                 ,"user_info_tag_id_city","user_info_tag_taglist","dead_line",
                "other_tag_pred_is_overdue", "other_tag_pred_is_last_date",
-               "user_info_tag_id_province", "user_info_tag_cell_province"]
+               "user_info_tag_id_province", "user_info_tag_cell_province","is_train"]
 y_list = [i  for i in df.columns if i[:2]=='y_']
 del_feature.extend(y_list)
+#删除重要度最高的变量(尝试)
+# del_feature = del_feature+["listing_info_last12_date_diff_min","listing_info_principal","listing_info_principal_ratio_last12",
+#                            "listing_info_principal_ratio_last6","listing_info_principal_ratio_last9","listing_info_principal_ratio_last3"]
 features = []
 for col in df.columns:
     if col not in del_feature:
         features.append(col)
+#读取筛选后的特征
+# features = pd.read_csv(open(inpath + "feature.csv", encoding='utf8'))
+# features = features["feature"].values.tolist()
 # catgory_feature = ["auditing_month","user_info_tag_gender","user_info_tag_cell_province","user_info_tag_id_province",
 #                    "user_info_tag_is_province_equal"]
 catgory_feature = ["auditing_month","user_info_tag_gender", "user_info_tag_is_province_equal"]
-y = "y_is_overdue"
+catgory_feature = [features.index(i) for i in catgory_feature if i in features]
+y = "y_is_last_date"
 
 del df_basic
 del df_train
@@ -79,10 +94,10 @@ del df_repay_logs
 del df_user_info_tag
 del df_other
 
-#开始训练  auc 0.7642
+#开始训练 0.7488
 from sklearn.model_selection import StratifiedKFold, KFold
 from sklearn.metrics import mean_squared_error
-from sklearn.metrics import log_loss,roc_auc_score
+from sklearn.metrics import log_loss, roc_auc_score
 import lightgbm as lgb
 import numpy as np
 
@@ -90,7 +105,7 @@ param ={'num_leaves': 2**5,
          'min_data_in_leaf': 32,
          'objective':'binary',
          'max_depth': 5,
-         'learning_rate': 0.03,
+         'learning_rate': 0.08,
          "min_child_samples": 20,
          "boosting": "gbdt",
          "feature_fraction": 0.8,
@@ -100,7 +115,8 @@ param ={'num_leaves': 2**5,
          "metric": 'auc',
          "lambda_l1": 0.5,
           "verbosity": -1,
-        'is_unbalance': True
+        # 'is_unbalance': True,
+        'random_state':2333,
         }
 folds = StratifiedKFold(n_splits=5, shuffle=True, random_state=2333)
 # folds = KFold(n_splits=5, shuffle=True, random_state=2333)
@@ -136,8 +152,7 @@ print("auc score:",roc_auc_score(train[y].values, oof))
 feature_importance = feature_importance_df[["feature", "importance"]].groupby("feature").mean().sort_values(by="importance",
 ascending=False)
 
-feature_importance.to_csv(outpath+"importance_is_overdue.csv")
-#测试集逾期概率
+#测试集最后一天还款概率
 test_dic = {
     "user_id": test["user_id"].values,
     "listing_id":test["listing_id"].values,
@@ -145,5 +160,8 @@ test_dic = {
     "due_amt":test["due_amt"].values,
 }
 test_prob = pd.DataFrame(test_dic)
-test_prob["overdue"] = predictions
-test_prob.to_csv(outpath+"is_overdue0613.csv",index=None)
+test_prob["last_date"] = predictions
+name = "is_last_date300.csv"
+test_prob.to_csv(outpath+name,index=None)
+feature_importance.to_csv(outpath+"importance_"+name) #0.763
+
