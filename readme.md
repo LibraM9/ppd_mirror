@@ -1,3 +1,5 @@
+## 赛题链接
+https://www.ppdai.ai/mirror/goToMirrorDetail?mirrorId=17
 ## 数据情况
 
 | 表名 | 内容 | 备注 |
@@ -10,9 +12,9 @@
 | user_behavior_logs | 用户行为SDK |  |
 | user_repay_logs | 还款日志 |  |
 
-##特征工程
+## 特征工程
 
-###Y
+### Y
 * 33类 多分类问题 未还款-1 还款0~31
 ```angular2html
 lgb 正常33 468.35 /7211
